@@ -19,14 +19,15 @@ static struct {
   jack_client_t *client;
   jack_port_t *in, *out;
   void *data;
-  callback *func;
+  callback * volatile func;
 } state;
 
 static int processcb(jack_nframes_t nframes, void *arg) {
   jack_default_audio_sample_t *in  = (jack_default_audio_sample_t *) jack_port_get_buffer(state.in,  nframes);
   jack_default_audio_sample_t *out = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out, nframes);
+  callback *f = state.func;
   for (jack_nframes_t i = 0; i < nframes; ++i) {
-    out[i] = state.func(state.data, in[i]);
+    out[i] = f(state.data, in[i]);
   }
   return 0;
 }
@@ -88,10 +89,13 @@ int main(int argc, char **argv) {
   do {
     if (0 == stat("go.so", &s)) {
       if (s.st_mtime > old_time) {
-        if ((new_dl = dlopen("go.so", RTLD_NOW | RTLD_NODELETE))) {
+        state.func = deffunc;
+        if (new_dl) { dlclose(new_dl); new_dl = 0; }
+        if ((new_dl = dlopen("./go.so", RTLD_NOW))) {
           callback *new_cb;
           *(void **) (&new_cb) = dlsym(new_dl, "go");
           if (new_cb) {
+            fprintf(stderr, "HUP! %p\n", new_cb);
             state.func = new_cb;
             old_time = s.st_mtime;
           } else {
