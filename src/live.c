@@ -22,13 +22,17 @@ static struct {
   callback * volatile func;
 } state;
 
+volatile int inprocesscb = 0;
+
 static int processcb(jack_nframes_t nframes, void *arg) {
+  inprocesscb = 1;
   jack_default_audio_sample_t *in  = (jack_default_audio_sample_t *) jack_port_get_buffer(state.in,  nframes);
   jack_default_audio_sample_t *out = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out, nframes);
   callback *f = state.func;
   for (jack_nframes_t i = 0; i < nframes; ++i) {
     out[i] = f(state.data, in[i]);
   }
+  inprocesscb = 0;
   return 0;
 }
 
@@ -89,6 +93,7 @@ int main(int argc, char **argv) {
   do {
     if (0 == stat("go.so", &s)) {
       if (s.st_mtime > old_time) {
+        while (inprocesscb) ;
         state.func = deffunc;
         if (new_dl) { dlclose(new_dl); new_dl = 0; }
         if ((new_dl = dlopen("./go.so", RTLD_NOW))) {
