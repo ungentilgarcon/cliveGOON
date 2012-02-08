@@ -66,6 +66,9 @@ int main(int argc, char **argv) {
     fprintf (stderr, "cannot activate JACK client");
     return 1;
   }
+  if (jack_connect(state.client, "live:output_1", "record:in_1")) {
+    fprintf(stderr, "cannot connect to recorder\n");
+  }
   const char **ports;
   if ((ports = jack_get_ports(state.client, NULL, NULL, JackPortIsPhysical | JackPortIsInput))) {
     int i = 0;
