@@ -1,0 +1,23 @@
+clive -- C audio live-coding skeleton
+
+deps:
+  jack-dev
+  bash
+  make
+  colorgcc
+  gcc
+  git
+  ecasound
+  htop
+  nano
+  xterm
+  mplayer
+
+usage:
+  git clone .../clive.git
+  ln -s your-onfailure-samples-directory/ clive/doh
+  cd clive/src && ./start.sh
+  edit code, save -> automatic git commit + recompile + reload
+
+bugs:
+  git autocommit spews errors if no changes (eg: on compile failure)
