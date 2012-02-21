@@ -1,0 +1,46 @@
+# license
+
+
+# docs
+
+
+# term log
+
+git log --pretty=format:"%H" --reverse --after 2012-02-18 |
+while read commit
+do
+  git show --color --word-diff=color --pretty=format:"%n%Cblue%H%Creset %C(yellow)%ci%Creset%n" $commit
+done |
+most
+
+
+# html log
+
+time (
+  git log --pretty=format:"%H" --reverse --after 2012-02-18 |
+  tee commits.txt |
+  while read commit
+  do
+    echo "<div class='commit' id='commit-$commit'>" &&
+    git show --pretty=format:"diff @ %ci" $commit |
+    python pyments-diff-c.py &&
+    echo "</div>"
+  done > diffs.html &&
+  osecs=0
+  cat commits.txt |
+  while read commit
+  do
+    secs=$(date -d "$(git show --pretty=%ci $commit | head -n 1)" +%s)
+    d=$((secs-osecs))
+    if [[ $d -gt 9999 ]] ; then d=0 ; fi
+    osecs=$secs
+    echo "#commit-$commit { margin-top: ${d}em; }"
+  done > commits.css &&
+  (
+    echo "<html><head><style type='text/css'>" &&
+    cat stylesheet.css commits.css &&
+    echo "</style></head><body>" &&
+    cat header.html diffs.html footer.html &&
+    echo "</body></html>"
+  ) > OUT.html
+)
