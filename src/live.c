@@ -57,7 +57,7 @@ static void atexitcb(void) {
 int main(int argc, char **argv) {
   srand(time(0));
   state.func = deffunc;
-  state.data = calloc(1, 1024 * 1024);
+  state.data = calloc(1, 64 * 1024 * 1024);
   jack_set_error_function(errorcb);
   if (!(state.client = jack_client_open("live", JackNoStartServer, 0))) {
     fprintf(stderr, "jack server not running?\n");
