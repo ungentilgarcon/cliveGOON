@@ -12,6 +12,7 @@ deps:
   nano
   xterm
   mplayer
+  inotifywait (inotify-tools)
 
 usage:
   git clone .../clive.git
