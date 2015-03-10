@@ -1,6 +1,4 @@
 #!/bin/bash
-sudo cpufreq-set -c 0 -g performance
-sudo cpufreq-set -c 1 -g performance
 SESSION="session-$(date -u +%F-%H%M%S)"
 git checkout -b "${SESSION}"
 make
