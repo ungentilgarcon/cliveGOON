@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <sys/inotify.h>
 #include <dlfcn.h>
 
 #include <jack/jack.h>
@@ -97,40 +98,44 @@ int main(int argc, char **argv) {
     }
     free(ports);
   }
-  // poll .so for changes
-  time_t old_time = 0;
-  struct stat s;
+  // watch .so for changes
+  int ino = inotify_init();
+  if (ino == -1) {
+    perror("inotify_init()");
+    return 1;
+  }
   void *new_dl = 0;
   while (1) {
-    if (0 == stat("go.so", &s)) {
-      // if the .so changed, reload it
-      if (s.st_mtime > old_time) {
-        // race mitigation: dlclose with jack running in .so -> boom
-        while (inprocesscb) ;
-        state.func = deffunc;
-        // must dlclose first, or the old .so is cached despite having changed
-        if (new_dl) { dlclose(new_dl); new_dl = 0; }
-        if ((new_dl = dlopen("./go.so", RTLD_NOW))) {
-          callback *new_cb;
-          *(void **) (&new_cb) = dlsym(new_dl, "go");
-          if (new_cb) {
-            state.func = new_cb;
-            old_time = s.st_mtime;
-            fprintf(stderr, "HUP! %p\n", *(void **) (&new_cb));
-          } else {
-            fprintf(stderr, "no go()!\n");
-          }
-        } else {
-          // another race condition: the .so disappeared between stat and load
-          fprintf(stderr, "no go.so!\n");
-        }
+    // race mitigation: dlclose with jack running in .so -> boom
+    while (inprocesscb) ;
+    state.func = deffunc;
+    // must dlclose first, or the old .so is cached despite having changed
+    if (new_dl) { dlclose(new_dl); new_dl = 0; }
+    if ((new_dl = dlopen("./go.so", RTLD_NOW))) {
+      callback *new_cb;
+      *(void **) (&new_cb) = dlsym(new_dl, "go");
+      if (new_cb) {
+        state.func = new_cb;
+        fprintf(stderr, "HUP! %p\n", *(void **) (&new_cb));
       } else {
-        // no change
+        fprintf(stderr, "no go()!\n");
       }
     } else {
-      fprintf(stderr, "no stat!\n");
+      // another race condition: the .so disappeared before load
+      fprintf(stderr, "no go.so!\n");
     }
-    sleep(1);
+    // wait for .so to change
+    if (-1 == inotify_add_watch(ino, "./go.so", IN_ONESHOT | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF)) {
+      // .so probably doesn't exist right now
+      do {
+        perror("inotify_add_watch()");
+        sleep(1);
+      } while (-1 == inotify_add_watch(ino, "./go.so", IN_ONESHOT | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF));
+    }
+    // read the event (blocking)
+    struct inotify_event ev;
+    ssize_t r = read(ino, &ev, sizeof(ev));
+    (void) r;
   }
   // never reached
   return 0;
