@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <linux/limits.h>
 #include <sys/inotify.h>
 #include <dlfcn.h>
 
@@ -98,12 +100,6 @@ int main(int argc, char **argv) {
     }
     free(ports);
   }
-  // watch .so for changes
-  int ino = inotify_init();
-  if (ino == -1) {
-    perror("inotify_init()");
-    return 1;
-  }
   void *new_dl = 0;
   while (1) {
     // race mitigation: dlclose with jack running in .so -> boom
@@ -124,18 +120,40 @@ int main(int argc, char **argv) {
       // another race condition: the .so disappeared before load
       fprintf(stderr, "no go.so!\n");
     }
-    // wait for .so to change
-    if (-1 == inotify_add_watch(ino, "./go.so", IN_ONESHOT | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF)) {
-      // .so probably doesn't exist right now
-      do {
-        perror("inotify_add_watch()");
-        sleep(1);
-      } while (-1 == inotify_add_watch(ino, "./go.so", IN_ONESHOT | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF));
+    // watch .so for changes
+    int ino = inotify_init();
+    if (ino == -1) {
+      perror("inotify_init()");
+      return 1;
     }
-    // read the event (blocking)
-    struct inotify_event ev;
-    ssize_t r = read(ino, &ev, sizeof(ev));
-    (void) r;
+    int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
+    if (wd == -1) {
+      perror("inotify_add_watch()");
+      return 1;
+    }
+    // read events (blocking)
+    struct { struct inotify_event ev; char name[NAME_MAX + 1]; } buf;
+    int done = 0;
+    do {
+      ssize_t r = read(ino, &buf, sizeof(buf));
+      if (r == -1) {
+        perror("read()");
+        sleep(1);
+      } else {
+        if (r >= (ssize_t) sizeof(buf.ev) + buf.ev.len) {
+          if (buf.ev.mask & IN_CLOSE_WRITE) {
+            fprintf(stderr, "%s\n", buf.name);
+            if (0 == strcmp("go.so", buf.name)) {
+              done = 1;
+            }
+          }
+          if (r > (ssize_t) sizeof(buf.ev) + buf.ev.len) {
+            fprintf(stderr, "extra event!\n");
+          }
+        }
+      }
+    } while (! done);
+    close(ino);
   }
   // never reached
   return 0;
