@@ -8,8 +8,9 @@ try:
     line = raw_input()
     if (line[:4] == 'diff') or (line[:5] == 'index') or (line[:3] == '---') or (line[:3] == '+++'):
       print ('<span class="dh">' + line + '</span>')
-    elif line[:2] == '@@': # FIXME highlight code after second @@
-      print ('<span class="dl">' + line + '</span>')
+    elif line[:2] == '@@':
+      ix = line[2:].index('@') + 4
+      print ('<span class="dl">' + line[:ix] + highlight(line[ix:], CLexer(), HtmlFormatter(nowrap=True))[:-1] + '</span>')
     elif line[:1] == ' ':
       print ('<span class="du"> ' + highlight(line[1:], CLexer(), HtmlFormatter(nowrap=True))[:-1] + '</span>')
     elif line[:1] == '+':
