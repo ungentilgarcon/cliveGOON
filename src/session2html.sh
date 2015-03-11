@@ -56,6 +56,7 @@ p { text-align: justify; }
   display: none;
 }
 .commit .k, .commit .kr, .commit .kt, .commit .p { font-weight: bold; }
+.commit .c1 { font-style: italic; }
 .commit .dh:first-child { font-weight: bold; color: black; }
 .commit .dh { width: 32ex; display: inline-block; float: right; color: silver; }
 .commit .dl { color: blue; }
