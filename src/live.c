@@ -12,17 +12,24 @@
 
 #include <jack/jack.h>
 
+#define CHANNELS 2
+
 // per-sample callback implemented in go.so
-typedef float callback(void *, float);
+typedef int callback(void *, int, const float *, float *);
 
 // default silent callback
-static float deffunc(void *data, float in) {
+static int deffunc(void *data, int channels, const float *in, float *out) {
+  (void) data;
+  (void) in;
+  for (int c = 0; c < channels; ++c) {
+    out[c] = 0;
+  }
   return 0;
 }
 
 static struct {
   jack_client_t *client;
-  jack_port_t *in, *out;
+  jack_port_t *in[CHANNELS], *out[CHANNELS];
   void *data;
   callback * volatile func;
 } state;
@@ -32,11 +39,24 @@ volatile int inprocesscb = 0;
 
 static int processcb(jack_nframes_t nframes, void *arg) {
   inprocesscb = 1; // race mitigation
-  jack_default_audio_sample_t *in  = (jack_default_audio_sample_t *) jack_port_get_buffer(state.in,  nframes);
-  jack_default_audio_sample_t *out = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out, nframes);
+  jack_default_audio_sample_t *in [CHANNELS];
+  jack_default_audio_sample_t *out[CHANNELS];
+  for (int c = 0; c < CHANNELS; ++c) {
+    in [c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.in [c], nframes);
+    out[c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out[c], nframes);
+  }
   callback *f = state.func;
   for (jack_nframes_t i = 0; i < nframes; ++i) {
-    out[i] = f(state.data, in[i]);
+    float ini[CHANNELS];
+    float outi[CHANNELS];
+    for (int c = 0; c < CHANNELS; ++c) {
+      ini [c] = in[c][i];
+      outi[c] = 0;
+    }
+    /* int inhibit_reload = */ f(state.data, CHANNELS, ini, outi);
+    for (int c = 0; c < CHANNELS; ++c) {
+      out[c][i] = outi[c];
+    }
   }
   inprocesscb = 0; // race mitigation
   return 0;
@@ -66,37 +86,47 @@ int main(int argc, char **argv) {
   atexit(atexitcb);
   jack_set_process_callback(state.client, processcb, 0);
   jack_on_shutdown(state.client, shutdowncb, 0);
-  // mono processing
-  state.in  = jack_port_register(state.client, "input_1",  JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput,  0);
-  state.out = jack_port_register(state.client, "output_1", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  // multi-channel processing
+  for (int c = 0; c < CHANNELS; ++c) {
+    char portname[100];
+    snprintf(portname, 100, "input_%d",  c + 1);
+    state.in[c]  = jack_port_register(state.client, portname, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput,  0);
+    snprintf(portname, 100, "output_%d", c + 1);
+    state.out[c] = jack_port_register(state.client, portname, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+  }
   if (jack_activate(state.client)) {
     fprintf (stderr, "cannot activate JACK client");
     return 1;
   }
-  // mono recording
-  if (jack_connect(state.client, "live:output_1", "record:in_1")) {
-    fprintf(stderr, "cannot connect to recorder\n");
+  // multi-channel recording
+  for (int c = 0; c < CHANNELS; ++c) {
+    char srcport[100], dstport[100];
+    snprintf(srcport, 100, "live:output_%d", c + 1);
+    snprintf(dstport, 100, "record:in_%d",   c + 1);
+    if (jack_connect(state.client, srcport, dstport)) {
+      fprintf(stderr, "cannot connect to recorder\n");
+    }
   }
-  // stereo output
+  // multi-channel output
   const char **ports;
   if ((ports = jack_get_ports(state.client, NULL, NULL, JackPortIsPhysical | JackPortIsInput))) {
-    int i = 0;
-    while (ports[i] && i < 2) {
-      if (jack_connect(state.client, jack_port_name(state.out), ports[i])) {
+    int c = 0;
+    while (ports[c] && c < CHANNELS) {
+      if (jack_connect(state.client, jack_port_name(state.out[c]), ports[c])) {
         fprintf(stderr, "cannot connect output port\n");
       }
-      i++;
+      c++;
     }
     free(ports);
   }
-  // stereo input
+  // multi_channel input
   if ((ports = jack_get_ports(state.client, NULL, NULL, JackPortIsPhysical | JackPortIsOutput))) {
-    int i = 0;
-    while (ports[i] && i < 2) {
-      if (jack_connect(state.client, ports[i], jack_port_name(state.in))) {
+    int c = 0;
+    while (ports[c] && c < CHANNELS) {
+      if (jack_connect(state.client, ports[c], jack_port_name(state.in[c]))) {
         fprintf(stderr, "cannot connect input port\n");
       }
-      i++;
+      c++;
     }
     free(ports);
   }
