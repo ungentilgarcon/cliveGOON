@@ -185,10 +185,10 @@ static inline double wave(WAVETABLE *wt, WAVE *w, double phase) {
 static inline double chorus(DELAY *del, int voices, double delayms, double depthms, double phase, double x) {
   double c = 0;
   for (int i = 0; i < voices; ++i) {
-    c += delread4(del, 3 + cos(twopi * (phase + i / (double) voices)));
+    c += delread4(del, delayms + depthms * cos(twopi * (phase + i / (double) voices)));
   }
   c /= voices;
-  delwrite(del, c + x);
+  delwrite(del, x - c);
   return c;
 }
 
