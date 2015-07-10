@@ -32,6 +32,7 @@ static struct {
   jack_port_t *in[CHANNELS], *out[CHANNELS];
   void *data;
   callback * volatile func;
+  int volatile reload;
 } state;
 
 // race mitigation
@@ -46,6 +47,11 @@ static int processcb(jack_nframes_t nframes, void *arg) {
     out[c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out[c], nframes);
   }
   callback *f = state.func;
+  if (state.reload) {
+    int *reloaded = state.data;
+    *reloaded = 1;
+    state.reload = 0;
+  }
   for (jack_nframes_t i = 0; i < nframes; ++i) {
     float ini[CHANNELS];
     float outi[CHANNELS];
@@ -78,6 +84,7 @@ int main(int argc, char **argv) {
   srand(time(0));
   state.func = deffunc;
   state.data = calloc(1, 64 * 1024 * 1024);
+  state.reload = 0;
   jack_set_error_function(errorcb);
   if (!(state.client = jack_client_open("live", JackNoStartServer, 0))) {
     fprintf(stderr, "jack server not running?\n");
@@ -142,6 +149,7 @@ int main(int argc, char **argv) {
       *(void **) (&new_cb) = dlsym(new_dl, "go");
       if (new_cb) {
         state.func = new_cb;
+        state.reload = 1;
         fprintf(stderr, "HUP! %p\n", *(void **) (&new_cb));
       } else {
         fprintf(stderr, "no go()!\n");
