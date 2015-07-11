@@ -76,4 +76,29 @@ static inline BIQUAD *notch(BIQUAD *bq, double hz, double q) {
   return bq;
 }
 
+// pd/extra/hilbert~.pd
+
+typedef struct { double w[2][2][2]; } HILBERT;
+
+static inline void hilbert(double out[2], HILBERT *h, const double in[2]) {
+  static const double c[2][2][5] =
+    { { {  1.94632, -0.94657,   0.94657,  -1.94632, 1 }
+      , {  0.83774, -0.06338,   0.06338,  -0.83774, 1 }
+      }
+    , { { -0.02569,  0.260502, -0.260502,  0.02569, 1 }
+      , {  1.8685,  -0.870686,  0.870686, -1.8685,  1 }
+      }
+    };
+  for (int i = 0; i < 2; ++i) {
+    double w = in[i] + c[i][0][0] * h->w[i][0][0] + c[i][0][1] * h->w[i][0][1];
+    double x = c[i][0][2] * w + c[i][0][3] * h->w[i][0][0] + c[i][0][4] * h->w[i][0][1];
+    h->w[i][0][1] = h->w[i][0][0];
+    h->w[i][0][0] = w;
+    w = x + c[i][1][0] * h->w[i][1][0] + c[i][1][1] * h->w[i][1][1];
+    out[i] = c[i][1][2] * w + c[i][1][3] * h->w[i][1][0] + c[i][1][4] * h->w[i][1][1];
+    h->w[i][1][1] = h->w[i][1][0];
+    h->w[i][1][0] = w;
+  }
+}
+
 #endif
