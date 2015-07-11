@@ -76,6 +76,26 @@ static inline BIQUAD *notch(BIQUAD *bq, double hz, double q) {
   return bq;
 }
 
+// based on pd's [vcf~]
+
+typedef struct { double re, im; } VCF;
+
+static inline double vcf(VCF *s, double x, double hz, double q) {
+  double qinv = q > 0 ? 1 / q : 0;
+  double ampcorrect = 2 - 2 / (q + 2);
+  double cf = hz * twopi / SR;
+  if (cf < 0) { cf = 0; }
+  double r = qinv > 0 ? 1 - cf * qinv : 0;
+  if (r < 0) { r = 0; }
+  double oneminusr = 1 - r;
+  double cre = r * cos(cf);
+  double cim = r * sin(cf);
+  double re2 = s->re;
+  s->re = ampcorrect * oneminusr * x + cre * re2 - cim * s->im;
+  s->im = cim * re2 + cre * s->im;
+  return s->re;
+}
+
 // pd/extra/hilbert~.pd
 
 typedef struct { double w[2][2][2]; } HILBERT;
