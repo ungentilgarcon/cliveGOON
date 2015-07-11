@@ -30,23 +30,18 @@ static inline double pitchshift(PITCHSHIFT *ps, double delayms, double windowms,
        + sin(pi * p1) * delread4(&ps->tape, windowms * p1 + delayms);
 }
 
-typedef struct { BIQUAD hip[2], lop[3]; } COMPRESS;
+typedef struct { HIP hip[2]; LOP lop[3]; } COMPRESS;
 
 void compress(double out[2], COMPRESS *s, double hiphz, double lophz1, double lophz2, double db, const double in[2]) {
-  highpass(&s->hip[0], hiphz, flatq);
-  highpass(&s->hip[1], hiphz, flatq);
-  lowpass(&s->lop[0], lophz1, flatq);
-  lowpass(&s->lop[1], lophz1, flatq);
-  lowpass(&s->lop[2], lophz2, flatq);
   double h[2] =
-    { biquad(&s->hip[0], in[0])
-    , biquad(&s->hip[1], in[1])
+    { hip(&s->hip[0], in[0], hiphz)
+    , hip(&s->hip[1], in[1], hiphz)
     };
   h[0] *= h[0];
   h[1] *= h[1];
-  h[0] = biquad(&s->lop[0], h[0]);
-  h[1] = biquad(&s->lop[1], h[1]);
-  double env = biquad(&s->lop[2], sqrt(fmax(0, h[0] + h[1])));
+  h[0] = lop(&s->lop[0], h[0], lophz1);
+  h[1] = lop(&s->lop[1], h[1], lophz1);
+  double env = lop(&s->lop[2], sqrt(fmax(0, h[0] + h[1])), lophz2);
   double g[2] =
     { in[0] / env
     , in[1] / env
