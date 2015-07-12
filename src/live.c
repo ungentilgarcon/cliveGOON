@@ -157,6 +157,10 @@ int main(int argc, char **argv) {
     } else {
       // another race condition: the .so disappeared before load
       fprintf(stderr, "no go.so!\n");
+      const char *err = dlerror();
+      if (err) {
+        fprintf(stderr, "%s\n", err);
+      }
     }
     // watch .so for changes
     int ino = inotify_init();
