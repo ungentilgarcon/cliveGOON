@@ -66,4 +66,9 @@ static inline double powtodb(double f) {
   return 100 + tenoverlog10 * log(f);
 }
 
+
+static inline double bytebeat(int x) {
+  return ((x & 0xFF) - 0x40) / (double) 0x40;
+}
+
 #endif
