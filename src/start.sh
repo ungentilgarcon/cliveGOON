@@ -12,7 +12,7 @@ xterm -geometry 80x36+0+87  -T make -e bash -c 'while true ; do make -q || ( git
 pid[2]=$!
 xterm -geometry 80x13+0+592 -T htop -e bash -c 'htop' &
 pid[3]=$!
-while true ; do geany -mist dsp.h go.c ; done &
+while true ; do geany -mist dsp.h dsp/*.h go.c ; done &
 pid[4]=$!
 trap "kill ${pid[0]} ${pid[1]} ${pid[2]} ${pid[3]} ${pid[4]} ; exit 0" INT
 wait
