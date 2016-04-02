@@ -3,6 +3,21 @@
 
 #include "func.h"
 
+// sample and hold
+
+typedef struct {
+  double trigger;
+  double value;
+} SAMPHOLD;
+
+double samphold(SAMPHOLD *s, double value, double trigger) {
+  if (trigger < s->trigger) {
+        s->value = value;
+  }
+  s->trigger = trigger;
+  return s->value;
+}
+
 // http://musicdsp.org/files/Audio-EQ-Cookbook.txt
 
 #define flatq 0.7071067811865476
