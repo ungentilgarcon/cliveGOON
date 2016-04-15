@@ -71,4 +71,9 @@ static inline double bytebeat(int x) {
   return ((x & 0xFF) - 0x40) / (double) 0x40;
 }
 
+static inline double bitcrush(double x, double bits) {
+  double n = pow(2, bits);
+  return round(x * n) / n;
+}
+
 #endif
