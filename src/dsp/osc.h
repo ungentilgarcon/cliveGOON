@@ -173,4 +173,93 @@ double pink(PINK *pink ) {
 	return output;
 }
 
+
+/* analogue adsr */
+
+#define SMALL 1e-6
+#define ANTIDENORMAL 1e-18
+
+#define RELEASE 0
+#define ATTACK  1
+#define DECAY   2
+
+typedef struct {
+  double trigger_1;
+  double peak_1;
+  double peak_2;
+  double threshold_1;
+  double threshold_2;
+  double out_1;
+  double out_2;
+  int phase;
+} ADSR;
+
+static inline double adsr(ADSR *adsr, double trigger, double attack, double peak, double decay, double sustain, double release, double threshold) {
+  ADSR *x = adsr;
+  /* restore history */
+  double trigger_1   = x->trigger_1;
+  double peak_1      = x->peak_1;
+  double peak_2      = x->peak_2;
+  double threshold_1 = x->threshold_1;
+  double threshold_2 = x->threshold_2;
+  double out_1       = x->out_1;
+  double out_2       = x->out_2;
+  int    phase       = x->phase;
+  /* useful semi-constant */
+  double T = -1000.0 / SR;
+  /* scale milliseconds to multipliers */
+  if (attack  < SMALL) { attack  = SMALL; } attack  = exp(T/attack);
+  if (decay   < SMALL) { decay   = SMALL; } decay   = exp(T/decay);
+  if (release < SMALL) { release = SMALL; } release = exp(T/release);
+  /* which phase are we in? */
+  if        (trigger - trigger_1 > 0) {
+      /* rising trigger */
+      phase = ATTACK;
+  } else if (trigger - trigger_1 < 0) {
+      /* falling trigger */
+      phase = RELEASE;
+  } else if ((out_1 > peak_1 * threshold_1) -
+             (out_2 > peak_2 * threshold_2) > 0) {
+      /* rising above peak threshold */
+      phase = DECAY;
+  }
+  /* behaviour depends on phase */
+  double target = 0, rate = 0;
+  switch (phase) {
+  case (ATTACK):  target = peak;    rate = attack;  break;
+  case (DECAY):   target = sustain; rate = decay;   break;
+  case (RELEASE): target = 0;       rate = release; break;
+  default:        target = 0;       rate = 0;       break; /* never */
+  }
+  /* exponential decay to a target */
+  double out = rate * out_1 + (1 - rate) * target;
+  /* kill denormal by quantization */
+  out += ANTIDENORMAL;
+  out -= ANTIDENORMAL;
+  /* recycle history */
+  trigger_1   = trigger;
+  peak_2      = peak_1;
+  peak_1      = peak;
+  threshold_2 = threshold_1;
+  threshold_1 = threshold;
+  out_2       = out_1;
+  out_1       = out;
+  /* save history */
+  x->trigger_1   = trigger_1;
+  x->peak_1      = peak_1;
+  x->peak_2      = peak_2;
+  x->threshold_1 = threshold_1;
+  x->threshold_2 = threshold_2;
+  x->out_1       = out_1;
+  x->out_2       = out_2;
+  x->phase       = phase;
+  return out;
+}
+
+#undef SMALL
+#undef ANTIDENORMAL
+#undef RELEASE
+#undef ATTACK
+#undef DECAY
+
 #endif
