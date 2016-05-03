@@ -154,4 +154,46 @@ static inline void hilbert(double out[2], HILBERT *h, const double in[2]) {
   }
 }
 
+typedef struct {
+  double ya1;
+  double wa1;
+  double yb1;
+  double wb1;
+  double yc1;
+  double wc1;
+  double yd1;
+} MOOG;
+
+static inline double moog(MOOG *m, double audio, double frequency, double resonance) {
+  MOOG *muug = m;
+  double ya1 = muug->ya1;
+  double wa1 = muug->wa1;
+  double yb1 = muug->yb1;
+  double wb1 = muug->wb1;
+  double yc1 = muug->yc1;
+  double wc1 = muug->wc1;
+  double yd1 = muug->yd1;
+  double v = 2;
+  double x = audio;
+  double f = frequency;
+  double r = resonance;
+  double g = 1 - exp(-twopi * f / SR);
+  double ya = ya1 + v * g * tanh((x - 4 * r * yd1) / v - wa1);
+  double wa = tanh(ya / v);
+  double yb = yb1 + v * g * (wa - wb1);
+  double wb = tanh(yb / v);
+  double yc = yc1 + v * g * (wb - wc1);
+  double wc = tanh(yc / v);
+  double yd = yd1 + v * g * (wc - tanh(yd1 / v));
+  double y = yd;
+  muug->ya1 = ya;
+  muug->wa1 = wa;
+  muug->yb1 = yb;
+  muug->wb1 = wb;
+  muug->yc1 = yc;
+  muug->wc1 = wc;
+  muug->yd1 = yd;
+  return y;
+}
+
 #endif
