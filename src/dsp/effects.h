@@ -60,4 +60,173 @@ void compress(double out[2], COMPRESS *s, double hiphz, double lophz1, double lo
   out[1] = tanh(g[1] * env);
 }
 
+// reverb
+
+typedef struct {
+  double x[4];
+} vec4;
+
+static inline void vsub(vec4 *o, const vec4 *a, const vec4 *b) {
+  for (int i = 0; i < 4; ++i) { o->x[i] = a->x[i] - b->x[i]; }
+}
+
+static inline void vmul(vec4 *o, const vec4 *a, double b) {
+  for (int i = 0; i < 4; ++i) { o->x[i] = a->x[i] * b; }
+}
+
+static inline double vdot(const vec4 *a, const vec4 *b) {
+  double s = 0;
+  for (int i = 0; i < 4; ++i) { s += a->x[i] * b->x[i]; }
+  return s;
+}
+
+static inline void vref(vec4 *o, const vec4 *x, const vec4 *normal, double distance) {
+  vmul(o, normal, 2 * (vdot(x, normal) - distance) / vdot(normal, normal));
+  vsub(o, x, o);
+}
+
+static inline double vtime(const vec4 *x, const vec4 *y) {
+  double c = 340.0 / 1000.0;
+  vec4 v;
+  vsub(&v, x, y);
+  double d = vdot(&v, &v);
+  return sqrt(d) / c;
+}
+
+typedef struct {
+  double times[9];
+  double decays[9];
+  DELAY del;
+  float delbuf[SR];
+} EARLYREF;
+
+static inline void early_ref_init(EARLYREF *eref, vec4 *size, vec4 *source, vec4 *listener) {
+  vec4 normals[8] =
+    { {{  1, 0, 0, 0 }}, {{ -1, 0, 0, 0 }}
+    , {{ 0,  1, 0, 0 }}, {{ 0, -1, 0, 0 }}
+    , {{ 0, 0,  1, 0 }}, {{ 0, 0, -1, 0 }}
+    , {{ 0, 0, 0,  1 }}, {{ 0, 0, 0, -1 }}
+    };
+  double distance[8] =
+    { 0, size->x[0], 0, size->x[1], 0, size->x[2], 0, size->x[3] };
+  vec4 sources[9];
+  vmul(&sources[0], source, 1);
+  for (int i = 1; i < 9; ++i) {
+    vref(&sources[i], source, &normals[i - 1], distance[i - 1]);
+  }
+  for (int i = 0; i < 9; ++i) {
+    eref->times[i] = vtime(&sources[i], listener);
+    eref->decays[i] = pow(10, -340 * eref->times[i] / 10000);
+  }
+  eref->del.length = SR;
+}
+
+static inline double early_ref(EARLYREF *eref, double audio, double brightness) {
+  delwrite(&eref->del, audio);
+  double s = 0;
+  for (int i = 1; i < 9; ++i) {
+    s += eref->decays[i] * delread1(&eref->del, eref->times[i]);
+  }
+  s *= brightness;
+  s += eref->decays[0] * delread1(&eref->del, eref->times[0]);
+  return s;
+}
+
+static inline int cmp_double(const void *a, const void *b) {
+  const double *x = a;
+  const double *y = b;
+  if (*x > *y) { return 1; }
+  if (*x < *y) { return -1; }
+  return 0;
+}
+
+typedef struct {
+  DELAY del;
+  float delbuf[SR];
+} REVERB_LINE;
+
+typedef struct {
+  double times[80];
+  REVERB_LINE lines[16];
+} REVERB;
+
+static inline void reverb_init(REVERB *r, const vec4 *size) {
+  double lx = size->x[0];
+  double ly = size->x[1];
+  double lz = size->x[2];
+  double lw = size->x[3];
+  int k = 0;
+  for (int nx = 0; nx < 3; ++nx) {
+  for (int ny = 0; ny < 3; ++ny) {
+  for (int nz = 0; nz < 3; ++nz) {
+  for (int nw = 0; nw < 3; ++nw) {
+    if (nx + ny + nz + nw == 0) continue;
+    r->times[k++] = 1000.0 / ((340.0/2.0) * sqrt((nx*nx)/(lx*lx)+(ny*ny)/(ly*ly)+(nz*nz)/(lz*lz)+(nw*nw)/(lw*lw)));
+  }}}}
+  qsort(r->times, 80, sizeof(double), cmp_double);
+  // de-duplicate
+  int wr = 0;
+  int rd = 1;
+  while (rd < 80) {
+    if (r->times[wr] == r->times[rd]) {
+      rd++;
+    } else {
+      r->times[wr] = r->times[rd];
+      wr++;
+      rd++;
+    }
+  }
+  for (int i = 0; i < 16; ++i) {
+    r->lines[i].del.length = SR;
+  }
+}
+
+static inline void reverb(double *out, REVERB *r, const double *in, double t60) {
+  const float mat[16][16] =
+  { { 1, -1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1 }
+  , { -1, 1, -1, -1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1 }
+  , { -1, -1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, 1 }
+  , { -1, -1, -1, 1, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1 }
+  , { -1, 1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1 }
+  , { 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, 1, 1, 1, -1, 1, 1 }
+  , { 1, 1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1 }
+  , { 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, -1, 1, 1, 1, -1 }
+  , { -1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1 }
+  , { 1, -1, 1, 1, 1, -1, 1, 1, -1, 1, -1, -1, 1, -1, 1, 1 }
+  , { 1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1 }
+  , { 1, 1, 1, -1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, -1 }
+  , { -1, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, -1 }
+  , { 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, -1, 1, -1, -1 }
+  , { 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1 }
+  , { 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, -1, -1, -1, 1 }
+  };
+  float source[16];
+  float output[16];
+  for (int i = 0; i < 16; ++i) {
+    source[i] = 0.125 * in[i & 1] + delread1(&r->lines[i].del, r->times[i]) * pow(10, -3 * r->times[i] / fmax(t60, 1e-6));
+  }
+  for (int i = 0; i < 16; ++i) {
+    float s = 0;
+    for (int j = 0; j < 16; ++j) {
+      s += mat[i][j] * source[j];
+    }
+    output[i] = 0.25 * s;
+  }
+  float s = 0;
+  for (int i = 0; i < 8; ++i) {
+    s += output[i];
+  }
+  s *= 0.125;
+  out[0] = s;
+  s = 0;
+  for (int i = 8; i < 16; ++i) {
+    s += output[i];
+  }
+  s *= 0.125;
+  out[1] = s;
+  for (int i = 0; i < 16; ++i) {
+    delwrite(&r->lines[i].del, output[i]);
+  }
+}
+
 #endif
