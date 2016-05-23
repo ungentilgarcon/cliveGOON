@@ -15,35 +15,6 @@
 unsigned char *webcam_buffer = 0;
 
 GLint u_text_size;
-int text_buffer_width = 80, text_buffer_height = 25;
-int text_width = 40, text_height = 14;
-char text_buffer[25][80] = {
-"                                                                                ",
-" diff --git a/src/go.c b/src/go.c                                               ",
-" index 415b0c0..aec4684 100644                                                  ",
-" --- a/src/go.c                                                                 ",
-" +++ b/src/go.c                                                                 ",
-" @@ -10,6 +10,7 @@ typedef struct {                                             ",
-"    COMPRESS compress;                                                          ",
-"    VCF snare;                                                                  ",
-"    VCF baff[2][8];                                                             ",
-" +  double volume;                                                              ",
-"  } S;                                                                          ",
-"                                                                                ",
-"  int go(S *s, int channels, const float *in, float *out) {                     ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                ",
-"                                                                                "
-};
 
 const char *text_vert =
 "#version 330 core\n"
@@ -217,7 +188,7 @@ GLFWwindow *create_context(int width, int height) {
   return window;
 }
 
-void initialize_gl(int screen_width, int screen_height, int webcam_width, int webcam_height) {
+void initialize_gl(int screen_width, int screen_height, int webcam_width, int webcam_height, int text_buffer_width, int text_buffer_height) {
   GLuint program = compile_program("text", text_vert, text_frag);
   glUseProgram(program);
   GLint ipos = glGetAttribLocation(program, "pos");
@@ -262,7 +233,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   GLuint t_text = 0;
   glGenTextures(1, &t_text);
   glBindTexture(GL_TEXTURE_2D, t_text);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, text_buffer_width, text_buffer_height, 0, GL_RED, GL_UNSIGNED_BYTE, text_buffer);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, text_buffer_width, text_buffer_height, 0, GL_RED, GL_UNSIGNED_BYTE, 0);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -324,6 +295,8 @@ int initialize_webcam(const char *dev, int *width, int *height) {
 int main(int argc, char **argv) {
   (void) argc;
   (void) argv;
+  int text_buffer_width = 128, text_buffer_height = 64;
+  char *text_buffer = malloc(text_buffer_width * text_buffer_height);
   int screen_width = 1280, screen_height = 720;
   int webcam_width = 0, webcam_height = 0;
   int webcam = initialize_webcam("/dev/video0", &webcam_width, &webcam_height);
@@ -337,7 +310,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   glfwSetKeyCallback(window, key_press_handler);
-  initialize_gl(screen_width, screen_height, webcam_width, webcam_height);
+  initialize_gl(screen_width, screen_height, webcam_width, webcam_height, text_buffer_width, text_buffer_height);
   while (! glfwWindowShouldClose(window)) {
     // read webcam
     v4l2_read(webcam, webcam_buffer, webcam_width * webcam_height * 3);
@@ -346,28 +319,31 @@ int main(int argc, char **argv) {
     glGenerateMipmap(GL_TEXTURE_2D);
     // read git diff
     FILE *diff_file = popen("git diff HEAD~1", "r");
-    int text_width = 0;
-    int text_height = 0;
-    char *line = 0;
-    size_t len = 0;
-    ssize_t read;
-    for (int y = 1; y < text_buffer_height - 1; ++y) {
-      if ((read = getline(&line, &len, diff_file)) == -1) {
-        break;
+    if (diff_file) {
+      memset(text_buffer, ' ', text_buffer_width * text_buffer_height);
+      int text_width = 0;
+      int text_height = 0;
+      char *line = 0;
+      size_t len = 0;
+      ssize_t read;
+      for (int y = 1; y < text_buffer_height - 1; ++y) {
+        if ((read = getline(&line, &len, diff_file)) == -1) {
+          break;
+        }
+        for (int x = 1; x < text_buffer_width - 1 && x < read; ++x) {
+          text_buffer[y * text_buffer_width + x] = line[x - 1];
+          text_width = text_width > x ? text_width : x;
+        }
+        text_height = y;
       }
-      for (int x = 1; x < text_buffer_width - 1 && x < read; ++x) {
-        text_buffer[y][x] = line[x - 1];
-        text_width = text_width > x ? text_width : x;
-      }
-      text_height = y;
+      text_width += 1;
+      text_height += 1;
+      free(line);
+      pclose(diff_file);
+      glActiveTexture(GL_TEXTURE1);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, text_buffer_width, text_buffer_height, GL_RED, GL_UNSIGNED_BYTE, text_buffer);
+      glUniform2f(u_text_size, text_width, text_height);
     }
-    text_width += 1;
-    text_height += 1;
-    free(line);
-    pclose(diff_file);
-    glActiveTexture(GL_TEXTURE1);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, text_buffer_width, text_buffer_height, GL_RED, GL_UNSIGNED_BYTE, text_buffer);
-    glUniform2f(u_text_size, text_width, text_height);
     // draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glfwSwapBuffers(window);
@@ -376,5 +352,6 @@ int main(int argc, char **argv) {
   glfwTerminate();
   v4l2_close(webcam);
   free(webcam_buffer);
+  free(text_buffer);
   return 0;
 }
