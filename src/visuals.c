@@ -336,8 +336,8 @@ int main(int argc, char **argv) {
         }
         text_height = y;
       }
-      text_width += 1;
-      text_height += 1;
+      text_width += 2;
+      text_height += 2;
       free(line);
       pclose(diff_file);
       glActiveTexture(GL_TEXTURE1);
