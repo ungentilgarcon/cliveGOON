@@ -1,3 +1,8 @@
 go.so
 live
+visuals
 *.wav
+*.pgm
+*.html
+*.txt
+*.s
