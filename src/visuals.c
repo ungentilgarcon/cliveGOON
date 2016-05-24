@@ -43,7 +43,7 @@ const char *text_frag =
 "uniform sampler2D ascii;\n"
 "uniform vec2 screen_size;\n"
 "uniform vec2 text_size;\n"
-"const float fly_factor = 2.0;\n"
+"const float fly_factor = 1.0;\n"
 "in vec2 coord;\n"
 "out vec4 colour;\n"
 "void main() {\n"
