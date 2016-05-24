@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <libv4l2.h>
 #include <linux/videodev2.h>
@@ -13,6 +16,11 @@
 #include <GLFW/glfw3.h>
 
 unsigned char *webcam_buffer = 0;
+struct webcam_buffer {
+  void *start;
+  size_t length;
+};
+struct webcam_buffer *webcam_buffers;
 
 GLint u_text_size;
 
@@ -259,7 +267,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
 }
 
 int initialize_webcam(const char *dev, int *width, int *height) {
-  int webcam = v4l2_open(dev, O_RDWR);
+  int webcam = v4l2_open(dev, O_RDWR | O_NONBLOCK, 0);
   struct v4l2_capability cap;
   memset(&cap, 0, sizeof(cap));
   if (-1 == v4l2_ioctl(webcam, VIDIOC_QUERYCAP, &cap)) {
@@ -288,8 +296,87 @@ int initialize_webcam(const char *dev, int *width, int *height) {
     fprintf(stderr, "couldn't set video format\n");
     exit(1);
   }
+  struct v4l2_requestbuffers req;
+  memset(&req, 0, sizeof(req));
+  req.count = 4;
+  req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  req.memory = V4L2_MEMORY_MMAP;
+  if (-1 == v4l2_ioctl(webcam, VIDIOC_REQBUFS, &req)) {
+    fprintf(stderr, "couldn't set video reqbufs\n");
+    exit(1);
+  }
+  webcam_buffers = calloc(req.count, sizeof(*webcam_buffers));
+  struct v4l2_buffer buf;
+  unsigned int n_buffers;
+  for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
+    memset(&buf, 0, sizeof(buf));
+    buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory      = V4L2_MEMORY_MMAP;
+    buf.index       = n_buffers;
+    if (-1 == v4l2_ioctl(webcam, VIDIOC_QUERYBUF, &buf)) {
+      fprintf(stderr, "couldn't query video buffer\n");
+      exit(1);
+    }
+    webcam_buffers[n_buffers].length = buf.length;
+    webcam_buffers[n_buffers].start = v4l2_mmap(0, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, webcam, buf.m.offset);
+    if (MAP_FAILED == webcam_buffers[n_buffers].start) {
+      fprintf(stderr, "couldn't mmap video buffer\n");
+      exit(1);
+    }
+  }
+  for (unsigned int i = 0; i < n_buffers; ++i) {
+    memset(&buf, 0, sizeof(buf));
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = i;
+    if (-1 == v4l2_ioctl(webcam, VIDIOC_QBUF, &buf)) {
+      fprintf(stderr, "couldn't queue video buffer\n");
+      exit(1);
+    }
+  }
+  enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  if (-1 == v4l2_ioctl(webcam, VIDIOC_STREAMON, &type)) {
+    fprintf(stderr, "couldn't start video streaming\n");
+    exit(1);
+  }
   webcam_buffer = malloc(*width * *height * 3);
   return webcam;
+}
+
+int read_webcam(int webcam, int width, int height) {
+  fd_set fds;
+  FD_ZERO(&fds);
+  FD_SET(webcam, &fds);
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = 1000000 / 60;
+  int r = select(webcam + 1, &fds, 0, 0, &tv);
+  if (r != 1) {
+    return 0;
+  }
+  struct v4l2_buffer buf;
+  memset(&buf, 0, sizeof(buf));
+  buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  buf.memory = V4L2_MEMORY_MMAP;
+  if (-1 == v4l2_ioctl(webcam, VIDIOC_DQBUF, &buf)) {
+    return 0;
+  }
+  memcpy(webcam_buffer, webcam_buffers[buf.index].start, width * height * 3);
+  v4l2_ioctl(webcam, VIDIOC_QBUF, &buf);
+  return 1;
+}
+
+void deinitialize_webcam(int webcam) {
+  enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  if (-1 == v4l2_ioctl(webcam, VIDIOC_STREAMOFF, &type)) {
+    fprintf(stderr, "couldn't stop video streaming\n");
+    exit(1);
+  }
+  for (int i = 0; i < 4; ++i) {
+    v4l2_munmap(webcam_buffers[i].start, webcam_buffers[i].length);
+  }
+  v4l2_close(webcam);
+  free(webcam_buffer);
 }
 
 int main(int argc, char **argv) {
@@ -313,10 +400,11 @@ int main(int argc, char **argv) {
   initialize_gl(screen_width, screen_height, webcam_width, webcam_height, text_buffer_width, text_buffer_height);
   while (! glfwWindowShouldClose(window)) {
     // read webcam
-    v4l2_read(webcam, webcam_buffer, webcam_width * webcam_height * 3);
-    glActiveTexture(GL_TEXTURE0);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, webcam_width, webcam_height, GL_RGB, GL_UNSIGNED_BYTE, webcam_buffer);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    if (read_webcam(webcam, webcam_width, webcam_height)) {
+      glActiveTexture(GL_TEXTURE0);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, webcam_width, webcam_height, GL_RGB, GL_UNSIGNED_BYTE, webcam_buffer);
+      glGenerateMipmap(GL_TEXTURE_2D);
+    }
     // read git diff
     FILE *diff_file = popen("git diff HEAD~1", "r");
     if (diff_file) {
@@ -350,8 +438,7 @@ int main(int argc, char **argv) {
     glfwPollEvents();
   }
   glfwTerminate();
-  v4l2_close(webcam);
-  free(webcam_buffer);
+  deinitialize_webcam(webcam);
   free(text_buffer);
   return 0;
 }
