@@ -15,6 +15,16 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include <jack/jack.h>
+
+#define SR 48000
+#include "dsp.h"
+
+jack_client_t *j_client = 0;
+jack_port_t *j_in[2] = { 0, 0 };
+
+float hue_shift[3] = { 1, 1, 1 };
+  
 unsigned char *webcam_buffer = 0;
 struct webcam_buffer {
   void *start;
@@ -438,9 +448,84 @@ void deinitialize_webcam(int webcam) {
   free(webcam_buffer);
 }
 
+void errorcb(const char *desc) {
+  fprintf(stderr, "JACK error: %s\n", desc);
+}
+
+void shutdowncb(void *arg) {
+  exit(1);
+}
+
+void atexitcb(void) {
+  jack_client_close(j_client);
+}
+
+struct state {
+  LOP lop[14];
+  HIP hip[8];
+};
+struct state state;
+
+int processcb(jack_nframes_t nframes, void *arg) {
+  jack_default_audio_sample_t *in[2];
+  for (int c = 0; c < 2; ++c) {
+    in[c] = (jack_default_audio_sample_t *) jack_port_get_buffer(j_in[c], nframes);
+  }
+  float lo = 0, md = 0, hi = 0;
+  float lof = 400;
+  float hif = 2000;
+  for (jack_nframes_t i = 0; i < nframes; ++i) {
+    float lo0 = lop(&state.lop[0], lop(&state.lop[1], in[0][i], lof), lof);
+    float lo1 = lop(&state.lop[2], lop(&state.lop[3], in[1][i], lof), lof);
+    float md0 = lop(&state.lop[4], lop(&state.lop[5], hip(&state.hip[0], hip(&state.hip[1], in[0][i], lof), lof), hif), hif);
+    float md1 = lop(&state.lop[6], lop(&state.lop[7], hip(&state.hip[2], hip(&state.hip[3], in[1][i], lof), lof), hif), hif);
+    float hi0 = hip(&state.hip[4], hip(&state.hip[5], in[0][i], hif), hif);
+    float hi1 = hip(&state.hip[6], hip(&state.hip[7], in[1][i], hif), hif);
+    lo = lop(&state.lop[8], lop(&state.lop[9], lo0 * lo0 + lo1 * lo1, 8), 8);
+    md = lop(&state.lop[10], lop(&state.lop[11], md0 * md0 + md1 * md1, 8), 8);
+    hi = lop(&state.lop[12], lop(&state.lop[13], hi0 * hi0 + hi1 * hi1, 8), 8);
+  }
+  hue_shift[0] = 1 + 64 * lo;
+  hue_shift[1] = 1 + 64 * md;
+  hue_shift[2] = 1 + 64 * hi;
+  return 0;
+}
+
+void initialize_audio(void) {
+  jack_set_error_function(errorcb);
+  if (!(j_client = jack_client_open("visuals", JackNoStartServer, 0))) {
+    fprintf(stderr, "jack server not running?\n");
+    exit(1);
+  }
+  atexit(atexitcb);
+  jack_set_process_callback(j_client, processcb, 0);
+  jack_on_shutdown(j_client, shutdowncb, 0);
+  // multi-channel processing
+  for (int c = 0; c < 2; ++c) {
+    char portname[100];
+    snprintf(portname, 100, "input_%d", c + 1);
+    j_in[c] = jack_port_register(j_client, portname, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+  }
+  if (jack_activate(j_client)) {
+    fprintf (stderr, "cannot activate JACK client");
+    exit(1);
+  }
+  // multi-channel visualization
+  for (int c = 0; c < 2; ++c) {
+    char srcport[100], dstport[100];
+    snprintf(srcport, 100, "live:output_%d", c + 1);
+    snprintf(dstport, 100, "visuals:input_%d", c + 1);
+    if (jack_connect(j_client, srcport, dstport)) {
+      fprintf(stderr, "cannot connect to live audio\n");
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   (void) argc;
   (void) argv;
+  memset(&state, 0, sizeof(state));
+  initialize_audio();
   int text_buffer_width = 128, text_buffer_height = 64;
   char *text_buffer = malloc(text_buffer_width * text_buffer_height);
   int screen_width = 1280, screen_height = 720;
@@ -490,7 +575,7 @@ int main(int argc, char **argv) {
       glUniform2f(u_text_size, text_width, text_height);
     }
     // read hue shift
-    glUniform3f(u_hue_shift, 2, 3, 5);
+    glUniform3fv(u_hue_shift, 1, hue_shift);
     // draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glfwSwapBuffers(window);
