@@ -130,7 +130,7 @@ const char *text_frag =
 "  vec2 glyph_coord = vec2(float(glyph % 16), float(glyph / 16));\n"
 "  glyph_coord += index;\n"
 "  glyph_coord *= vec2(1.0 / 16.0, 1.0 / 6.0);\n"
-"  vec2 glyph_coord1 = (glyph_coord + index1) * vec2(1.0 / 16.0, 1.0 / 6.0);\n"
+"  vec2 glyph_coord1 = index1 * vec2(1.0 / 16.0, 1.0 / 6.0);\n"
 "  vec3 base = vec3(0.5);\n"
 "  if (line_glyph == 0) { base = vec3(1.0); } else\n"
 "  if (line_glyph == 32) { base = vec3(0.5, 0.5, 1.0); } else\n"
