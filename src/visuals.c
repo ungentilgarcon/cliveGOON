@@ -485,9 +485,9 @@ int processcb(jack_nframes_t nframes, void *arg) {
     md = lop(&state.lop[10], lop(&state.lop[11], md0 * md0 + md1 * md1, 8), 8);
     hi = lop(&state.lop[12], lop(&state.lop[13], hi0 * hi0 + hi1 * hi1, 8), 8);
   }
-  hue_shift[0] = 1 + 64 * lo;
-  hue_shift[1] = 1 + 64 * md;
-  hue_shift[2] = 1 + 64 * hi;
+  hue_shift[0] = 1 + 16 * sqrtf(lo);
+  hue_shift[1] = 1 + 16 * sqrtf(md);
+  hue_shift[2] = 1 + 16 * sqrtf(hi);
   return 0;
 }
 
