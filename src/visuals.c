@@ -392,8 +392,6 @@ int main(int argc, char **argv) {
   }
   GLFWwindow *window = create_context(screen_width, screen_height);
   if (! window) {
-    v4l2_close(webcam);
-    free(webcam_buffer);
     return 1;
   }
   glfwSetKeyCallback(window, key_press_handler);
