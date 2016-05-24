@@ -20,9 +20,10 @@ struct webcam_buffer {
   void *start;
   size_t length;
 };
-struct webcam_buffer *webcam_buffers;
+struct webcam_buffer *webcam_buffers = 0;
 
-GLint u_text_size;
+GLint u_text_size = -1;
+GLint u_hue_shift = -1;
 
 const char *text_vert =
 "#version 330 core\n"
@@ -43,6 +44,7 @@ const char *text_frag =
 "uniform sampler2D ascii;\n"
 "uniform vec2 screen_size;\n"
 "uniform vec2 text_size;\n"
+"uniform vec3 hue_shift;\n"
 "const float fly_factor = 1.0;\n"
 "in vec2 coord;\n"
 "out vec4 colour;\n"
@@ -131,14 +133,15 @@ const char *text_frag =
 "  glyph_coord += index;\n"
 "  glyph_coord *= vec2(1.0 / 16.0, 1.0 / 6.0);\n"
 "  vec2 glyph_coord1 = index1 * vec2(1.0 / 16.0, 1.0 / 6.0);\n"
-"  vec3 base = vec3(0.5);\n"
+"  vec3 base = vec3(0.25);\n"
 "  if (line_glyph == 0) { base = vec3(1.0); } else\n"
-"  if (line_glyph == 32) { base = vec3(0.5, 0.5, 1.0); } else\n"
-"  if (line_glyph == 11) { base = vec3(0.5, 1.0, 0.5); } else\n"
-"  if (line_glyph == 13) { base = vec3(1.0, 0.5, 0.5); }\n"
-"  colour = vec4(base\n"
-"         * textureGrad(ascii, glyph_coord, dFdx(glyph_coord1), dFdy(glyph_coord1)).r\n"
-"         + webcam_colour, 2.0) * 0.5;\n"
+"  if (line_glyph == 32) { base = vec3(0.25, 0.25, 1.0); } else\n"
+"  if (line_glyph == 11) { base = vec3(0.25, 1.0, 0.25); } else\n"
+"  if (line_glyph == 13) { base = vec3(1.0, 0.25, 0.25); }\n"
+"  webcam_colour = 0.5 * (1.0 - cos(hue_shift * 3.141592653 * webcam_colour));\n"
+"  vec3 glyph_colour = base *\n"
+"    textureGrad(ascii, glyph_coord, dFdx(glyph_coord1), dFdy(glyph_coord1)).r;\n"
+"  colour = vec4(2.0 * glyph_colour + webcam_colour, 2.0) * 0.5;\n"
 "}\n"
 ;
 
@@ -261,6 +264,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   GLint u_webcam = glGetUniformLocation(program, "webcam");
   GLint u_ascii = glGetUniformLocation(program, "ascii");
   GLint u_text = glGetUniformLocation(program, "text");
+  u_hue_shift = glGetUniformLocation(program, "hue_shift");
   glUniform1i(u_webcam, 0);
   glUniform1i(u_text, 1);
   glUniform1i(u_ascii, 2);
@@ -485,6 +489,8 @@ int main(int argc, char **argv) {
       glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, text_buffer_width, text_buffer_height, GL_RED, GL_UNSIGNED_BYTE, text_buffer);
       glUniform2f(u_text_size, text_width, text_height);
     }
+    // read hue shift
+    glUniform3f(u_hue_shift, 2, 3, 5);
     // draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glfwSwapBuffers(window);
