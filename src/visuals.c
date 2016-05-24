@@ -473,7 +473,7 @@ int processcb(jack_nframes_t nframes, void *arg) {
   }
   float lo = 0, md = 0, hi = 0;
   float lof = 400;
-  float hif = 2000;
+  float hif = 1000;
   for (jack_nframes_t i = 0; i < nframes; ++i) {
     float lo0 = lop(&state.lop[0], lop(&state.lop[1], in[0][i], lof), lof);
     float lo1 = lop(&state.lop[2], lop(&state.lop[3], in[1][i], lof), lof);
