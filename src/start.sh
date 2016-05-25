@@ -17,4 +17,5 @@ pid[4]=$!
 trap "kill ${pid[0]} ${pid[1]} ${pid[2]} ${pid[3]} ${pid[4]}; exit 0" INT
 wait
 )
-git checkout master
+git rm ANNOUNCE
+git commit -m "done"
