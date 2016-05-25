@@ -529,6 +529,7 @@ int main(int argc, char **argv) {
   if (! window) {
     return 1;
   }
+  glfwSetWindowPos(window, 1366, (1024 - 720)/2);
   glfwSetKeyCallback(window, key_press_handler);
   initialize_gl(screen_width, screen_height, webcam_width, webcam_height, text_buffer_width, text_buffer_height);
   while (! glfwWindowShouldClose(window)) {
