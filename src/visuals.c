@@ -510,15 +510,6 @@ void initialize_audio(void) {
     fprintf (stderr, "cannot activate JACK client");
     exit(1);
   }
-  // multi-channel visualization
-  for (int c = 0; c < 2; ++c) {
-    char srcport[100], dstport[100];
-    snprintf(srcport, 100, "live:output_%d", c + 1);
-    snprintf(dstport, 100, "visuals:input_%d", c + 1);
-    if (jack_connect(j_client, srcport, dstport)) {
-      fprintf(stderr, "cannot connect to live audio\n");
-    }
-  }
 }
 
 int main(int argc, char **argv) {

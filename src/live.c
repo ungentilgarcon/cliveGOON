@@ -114,6 +114,15 @@ int main(int argc, char **argv) {
       fprintf(stderr, "cannot connect to recorder\n");
     }
   }
+  // multi-channel visualization
+  for (int c = 0; c < CHANNELS; ++c) {
+    char srcport[100], dstport[100];
+    snprintf(srcport, 100, "live:output_%d", c + 1);
+    snprintf(dstport, 100, "visuals:input_%d", c + 1);
+    if (jack_connect(state.client, srcport, dstport)) {
+      fprintf(stderr, "cannot connect to visuals\n");
+    }
+  }
   // multi-channel output
   const char **ports;
   if ((ports = jack_get_ports(state.client, NULL, NULL, JackPortIsPhysical | JackPortIsInput))) {
