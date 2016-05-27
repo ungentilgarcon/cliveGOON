@@ -61,7 +61,7 @@ const char *text_frag =
 "uniform vec3 hue_shift;\n"
 "uniform mat3 hue_rotate;\n"
 "uniform mat3 hue_unrotate;\n"
-"const float fly_factor = 1.0;\n"
+"const float fly_factor = 2.0;\n"
 "in vec2 coord;\n"
 "out vec4 colour;\n"
 "void main() {\n"
