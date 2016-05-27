@@ -14,6 +14,8 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#define GLM_FORCE_RADIANS
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <jack/jack.h>
 
@@ -34,6 +36,8 @@ struct webcam_buffer *webcam_buffers = 0;
 
 GLint u_text_size = -1;
 GLint u_hue_shift = -1;
+GLint u_hue_rotate = -1;
+GLint u_hue_unrotate = -1;
 
 const char *text_vert =
 "#version 330 core\n"
@@ -55,6 +59,8 @@ const char *text_frag =
 "uniform vec2 screen_size;\n"
 "uniform vec2 text_size;\n"
 "uniform vec3 hue_shift;\n"
+"uniform mat3 hue_rotate;\n"
+"uniform mat3 hue_unrotate;\n"
 "const float fly_factor = 1.0;\n"
 "in vec2 coord;\n"
 "out vec4 colour;\n"
@@ -152,8 +158,11 @@ const char *text_frag =
 "  if (line_glyph == 32) { base = vec3(0.25, 0.25, 1.0); } else\n"
 "  if (line_glyph == 11) { base = vec3(0.25, 1.0, 0.25); } else\n"
 "  if (line_glyph == 13) { base = vec3(1.0, 0.25, 0.25); }\n"
+"  webcam_colour = hue_rotate * webcam_colour;\n"
 "  vec3 webcam_colour1 = 0.5 * (1.0 - cos(hue_shift * 3.141592653 * webcam_colour));\n"
 "  webcam_colour = mix(webcam_colour, webcam_colour1, cell_mask);\n"
+"  webcam_colour = hue_unrotate * webcam_colour;\n"
+"  webcam_colour = clamp(webcam_colour, 0.0, 1.0);\n"
 "  vec3 glyph_colour = base *\n"
 "    textureGrad(ascii, glyph_coord, dFdx(glyph_coord1), dFdy(glyph_coord1)).r;\n"
 "  colour = vec4(2.0 * glyph_colour + webcam_colour, 2.0) * 0.5;\n"
@@ -280,6 +289,8 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   GLint u_ascii = glGetUniformLocation(program, "ascii");
   GLint u_text = glGetUniformLocation(program, "text");
   u_hue_shift = glGetUniformLocation(program, "hue_shift");
+  u_hue_rotate = glGetUniformLocation(program, "hue_rotate");
+  u_hue_unrotate = glGetUniformLocation(program, "hue_unrotate");
   glUniform1i(u_webcam, 0);
   glUniform1i(u_text, 1);
   glUniform1i(u_ascii, 2);
@@ -537,6 +548,7 @@ int main(int argc, char **argv) {
   glfwSetWindowPos(window, 1366, (1024 - 720)/2);
   glfwSetKeyCallback(window, key_press_handler);
   initialize_gl(screen_width, screen_height, webcam_width, webcam_height, text_buffer_width, text_buffer_height);
+  int frame = 0;
   while (! glfwWindowShouldClose(window)) {
     // read webcam
     if (read_webcam(webcam, webcam_width, webcam_height)) {
@@ -573,6 +585,13 @@ int main(int argc, char **argv) {
     }
     // read hue shift
     glUniform3fv(u_hue_shift, 1, hue_shift);
+    float theta = twopi * frame++ / 600;
+    glm::mat4 rot4 = glm::rotate(glm::mat4(1.0), theta, glm::vec3(1.0f,1.0f,1.0f));
+    glm::mat4 unrot4 = glm::rotate(glm::mat4(1.0), -theta, glm::vec3(1.0f,1.0f,1.0f));
+    glm::mat3 rot(rot4);
+    glm::mat3 unrot(unrot4);
+    glUniformMatrix3fv(u_hue_rotate, 1, GL_FALSE, &rot[0][0]);
+    glUniformMatrix3fv(u_hue_unrotate, 1, GL_FALSE, &unrot[0][0]);
     // draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glfwSwapBuffers(window);
