@@ -133,8 +133,8 @@ static inline double early_ref(EARLYREF *eref, double audio, double brightness) 
 }
 
 static inline int cmp_double(const void *a, const void *b) {
-  const double *x = a;
-  const double *y = b;
+  const double *x = (const double *) a;
+  const double *y = (const double *) b;
   if (*x > *y) { return 1; }
   if (*x < *y) { return -1; }
   return 0;

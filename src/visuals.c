@@ -1,4 +1,6 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include <assert.h>
 #include <stdio.h>
@@ -339,7 +341,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   GLuint t_ascii = 0;
   glGenTextures(1, &t_ascii);
   glBindTexture(GL_TEXTURE_2D, t_ascii);
-  unsigned char *ascii_data = malloc(2048 * 768);
+  unsigned char *ascii_data = (unsigned char *) malloc(2048 * 768);
   FILE *ascii_file = fopen("ascii.pgm", "rb");
   fscanf(ascii_file, "P5\n2048 768\n255");
   int c = fgetc(ascii_file);
@@ -394,7 +396,7 @@ int initialize_webcam(const char *dev, int *width, int *height) {
     fprintf(stderr, "couldn't set video reqbufs\n");
     exit(1);
   }
-  webcam_buffers = calloc(req.count, sizeof(*webcam_buffers));
+  webcam_buffers = (struct webcam_buffer *) calloc(req.count, sizeof(*webcam_buffers));
   struct v4l2_buffer buf;
   unsigned int n_buffers;
   for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
@@ -428,7 +430,7 @@ int initialize_webcam(const char *dev, int *width, int *height) {
     fprintf(stderr, "couldn't start video streaming\n");
     exit(1);
   }
-  webcam_buffer = malloc(*width * *height * 3);
+  webcam_buffer = (unsigned char *) malloc(*width * *height * 3);
   return webcam;
 }
 
@@ -538,7 +540,7 @@ int main(int argc, char **argv) {
   memset(&state, 0, sizeof(state));
   initialize_audio();
   int text_buffer_width = 128, text_buffer_height = 64;
-  char *text_buffer = malloc(text_buffer_width * text_buffer_height);
+  char *text_buffer = (char *) malloc(text_buffer_width * text_buffer_height);
   int screen_width = 1280, screen_height = 720;
   int webcam_width = 0, webcam_height = 0;
   int webcam = initialize_webcam("/dev/video0", &webcam_width, &webcam_height);
