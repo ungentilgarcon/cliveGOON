@@ -38,6 +38,7 @@ GLint u_text_size = -1;
 GLint u_hue_shift = -1;
 GLint u_hue_rotate = -1;
 GLint u_hue_unrotate = -1;
+GLint u_fly_size = -1;
 
 const char *text_vert =
 "#version 330 core\n"
@@ -61,6 +62,7 @@ const char *text_frag =
 "uniform vec3 hue_shift;\n"
 "uniform mat3 hue_rotate;\n"
 "uniform mat3 hue_unrotate;\n"
+"uniform float fly_size;\n"
 "const float fly_factor = 2.0;\n"
 "in vec2 coord;\n"
 "out vec4 colour;\n"
@@ -75,12 +77,11 @@ const char *text_frag =
 "  } else {\n"
 "    webcam_coord.x /= webcam_aspect / screen_aspect;\n"
 "  }\n"
-"  webcam_coord += vec2(0.5);\n"
 "  vec2 webcam_coord1 = webcam_coord;\n"
 "  float r = sqrt(3.0)/2.0;\n"
 "  webcam_coord.y *= r;\n"
 "  webcam_coord1.y *= r;\n"
-"  vec2 middle = round(24 * vec2(webcam_coord.x + webcam_coord.y / 2.0, webcam_coord.y));\n"
+"  vec2 middle = round(fly_size * vec2(webcam_coord.x + webcam_coord.y / 2.0, webcam_coord.y));\n"
 "  middle.x -= middle.y / 2.0;\n"
 "  vec2 middle0 = middle;\n"
 "  vec2 middle1 = middle + vec2(1.0, 0.0);\n"
@@ -89,13 +90,13 @@ const char *text_frag =
 "  vec2 middle4 = middle + vec2(0.5, 1.0);\n"
 "  vec2 middle5 = middle + vec2(-0.5, -1.0);\n"
 "  vec2 middle6 = middle + vec2(0.5, -1.0);\n"
-"  middle0 /= 24.0;\n"
-"  middle1 /= 24.0;\n"
-"  middle2 /= 24.0;\n"
-"  middle3 /= 24.0;\n"
-"  middle4 /= 24.0;\n"
-"  middle5 /= 24.0;\n"
-"  middle6 /= 24.0;\n"
+"  middle0 /= fly_size;\n"
+"  middle1 /= fly_size;\n"
+"  middle2 /= fly_size;\n"
+"  middle3 /= fly_size;\n"
+"  middle4 /= fly_size;\n"
+"  middle5 /= fly_size;\n"
+"  middle6 /= fly_size;\n"
 "  float d = 1.0/0.0;\n"
 "  if (distance(webcam_coord, middle0) < d) {\n"
 "    d = distance(webcam_coord, middle0);\n"
@@ -125,12 +126,14 @@ const char *text_frag =
 "    d = distance(webcam_coord, middle6);\n"
 "    middle = middle6;\n"
 "  }\n"
-"  ivec2 imiddle = ivec2(round(24.0 * middle * 2.0));\n"
+"  ivec2 imiddle = ivec2(round(fly_size * middle * 2.0));\n"
 "  int icell = (((imiddle.x / 2 + ((1 + imiddle.y / 2) & 1)) % 3) + 3) % 3;\n"
 "  vec3 cell_mask = vec3(1.0);\n"
 "  cell_mask[icell] = 0.5;\n"
 "  webcam_coord = webcam_coord + fly_factor * (webcam_coord - middle);\n"
+"  webcam_coord += vec2(0.5);\n"
 "  webcam_coord1 = webcam_coord1 + fly_factor * webcam_coord1;\n"
+"  webcam_coord1 += vec2(0.5);\n"
 "  webcam_coord.y /= r;\n"
 "  webcam_coord1.y /= r;\n"
 "  vec3 webcam_colour = textureGrad(webcam, webcam_coord, dFdx(webcam_coord1), dFdy(webcam_coord1)).rgb;\n"
@@ -291,6 +294,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   u_hue_shift = glGetUniformLocation(program, "hue_shift");
   u_hue_rotate = glGetUniformLocation(program, "hue_rotate");
   u_hue_unrotate = glGetUniformLocation(program, "hue_unrotate");
+  u_fly_size = glGetUniformLocation(program, "fly_size");
   glUniform1i(u_webcam, 0);
   glUniform1i(u_text, 1);
   glUniform1i(u_ascii, 2);
@@ -585,17 +589,19 @@ int main(int argc, char **argv) {
     }
     // read hue shift
     glUniform3fv(u_hue_shift, 1, hue_shift);
-    float theta = twopi * frame++ / 600;
+    float theta = twopi * frame / 600;
     glm::mat4 rot4 = glm::rotate(glm::mat4(1.0), theta, glm::vec3(1.0f,1.0f,1.0f));
     glm::mat4 unrot4 = glm::rotate(glm::mat4(1.0), -theta, glm::vec3(1.0f,1.0f,1.0f));
     glm::mat3 rot(rot4);
     glm::mat3 unrot(unrot4);
     glUniformMatrix3fv(u_hue_rotate, 1, GL_FALSE, &rot[0][0]);
     glUniformMatrix3fv(u_hue_unrotate, 1, GL_FALSE, &unrot[0][0]);
+    glUniform1f(u_fly_size, 24 * pow(0.5, 0.5 + 0.5 * cos(twopi * frame / 2500)));
     // draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glfwSwapBuffers(window);
     glfwPollEvents();
+    frame++;
   }
   glfwTerminate();
   deinitialize_webcam(webcam);
