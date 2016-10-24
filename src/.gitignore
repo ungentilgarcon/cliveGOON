@@ -1,6 +1,6 @@
-go.so
 live
 visuals
+*.so
 *.wav
 *.ogg
 *.pgm
