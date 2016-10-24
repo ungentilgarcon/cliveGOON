@@ -146,31 +146,55 @@ int main(int argc, char **argv) {
     }
     free(ports);
   }
+  void *old_dl = 0;
   void *new_dl = 0;
+  int which = 0;
   while (1) {
-    // race mitigation: dlclose with jack running in .so -> boom
-    while (inprocesscb) ;
-    state.func = deffunc;
-    // must dlclose first, or the old .so is cached despite having changed
-    if (new_dl) { dlclose(new_dl); new_dl = 0; }
-    if ((new_dl = dlopen("./go.so", RTLD_NOW))) {
+/*
+Double buffering to avoid glitches on reload.  Can't dlopen the same file
+twice (or even symlinks thereof) due to aggressive caching seemingly based
+on file names by libdl, so copy the target to one of two names.
+To avoid crashing by unloading running code, open the other .so filename to the
+runnning code before swapping pointers when hopefully not in a JACK process
+callback in the DSP thread.  Finally dlclose the previous and swap the buffer
+index.
+*/
+    const char *copycmd[2] = { "cp -f ./go.so ./go.a.so", "cp -f go.so go.b.so" };
+    const char *library[2] = { "./go.a.so", "./go.b.so" };
+    if (! system(copycmd[which])) {
+      fprintf(stderr, "huh? %s\n", copycmd[which]);
+    }
+    if ((new_dl = dlopen(library[which], RTLD_NOW))) {
       callback *new_cb;
       *(void **) (&new_cb) = dlsym(new_dl, "go");
       if (new_cb) {
+        // race mitigation: dlclose with jack running in .so -> boom
+        while (inprocesscb) ;
         state.func = new_cb;
         state.reload = 1;
+        if (old_dl) {
+          dlclose(old_dl);
+        }
+        old_dl = new_dl;
+        new_dl = 0;
+        which = 1 - which;
         fprintf(stderr, "HUP! %p\n", *(void **) (&new_cb));
       } else {
         fprintf(stderr, "no go()!\n");
+        dlclose(new_dl);
       }
     } else {
       // another race condition: the .so disappeared before load
-      fprintf(stderr, "no go.so!\n");
+      fprintf(stderr, "no %s!\n", library[which]);
       const char *err = dlerror();
       if (err) {
         fprintf(stderr, "%s\n", err);
       }
     }
+/*
+Watch for filesystem changes.  Possibly some race conditions here, as it
+seems some saves/recompiles get missed sometimes?
+*/
     // watch .so for changes
     int ino = inotify_init();
     if (ino == -1) {
