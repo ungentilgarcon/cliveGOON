@@ -159,9 +159,9 @@ runnning code before swapping pointers when hopefully not in a JACK process
 callback in the DSP thread.  Finally dlclose the previous and swap the buffer
 index.
 */
-    const char *copycmd[2] = { "cp -f ./go.so ./go.a.so", "cp -f go.so go.b.so" };
+    const char *copycmd[2] = { "cp -f ./go.so ./go.a.so", "cp -f ./go.so ./go.b.so" };
     const char *library[2] = { "./go.a.so", "./go.b.so" };
-    if (! system(copycmd[which])) {
+    if (system(copycmd[which])) {
       fprintf(stderr, "huh? %s\n", copycmd[which]);
     }
     if ((new_dl = dlopen(library[which], RTLD_NOW))) {
