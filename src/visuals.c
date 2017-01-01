@@ -543,7 +543,7 @@ int main(int argc, char **argv) {
   char *text_buffer = (char *) malloc(text_buffer_width * text_buffer_height);
   int screen_width = 1280, screen_height = 720;
   int webcam_width = 0, webcam_height = 0;
-  int webcam = initialize_webcam("/dev/video0", &webcam_width, &webcam_height);
+  int webcam = initialize_webcam("/dev/video1", &webcam_width, &webcam_height);
   if (webcam < 0) {
     return 1;
   }
