@@ -129,7 +129,7 @@ const char *text_frag =
 "    middle = middle6;\n"
 "  }\n"
 "  ivec2 imiddle = ivec2(round(fly_size * middle * 2.0));\n"
-"  int icell = (((imiddle.x / 2 + ((1 + imiddle.y / 2) & 1)) % 3) + 3) % 3;\n"
+"  int icell = (((int(floor(float(imiddle.x) / 2.0)) + ((1 + int(floor(float(imiddle.y) / 2.0))) & 1)) % 3) + 3) % 3;\n"
 "  vec3 cell_mask = vec3(1.0);\n"
 "  cell_mask[icell] = 0.5;\n"
 "  webcam_coord = webcam_coord + fly_factor * (webcam_coord - middle);\n"
