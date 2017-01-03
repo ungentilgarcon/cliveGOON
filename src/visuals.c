@@ -13,6 +13,8 @@
 #include <fcntl.h>
 #include <libv4l2.h>
 #include <linux/videodev2.h>
+#include <setjmp.h>
+#include <jpeglib.h>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -30,6 +32,7 @@ jack_port_t *j_in[2] = { 0, 0 };
 float hue_shift[3] = { 1, 1, 1 };
   
 unsigned char *webcam_buffer = 0;
+unsigned char **webcam_buffer_ptrs = 0;
 struct webcam_buffer {
   void *start;
   size_t length;
@@ -382,7 +385,7 @@ int initialize_webcam(const char *dev, int *width, int *height) {
   }
   *width = format.fmt.pix.width;
   *height = format.fmt.pix.height;
-  format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB24;
+  format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
   if (-1 == v4l2_ioctl(webcam, VIDIOC_S_FMT, &format)) {
     fprintf(stderr, "couldn't set video format\n");
     exit(1);
@@ -431,7 +434,21 @@ int initialize_webcam(const char *dev, int *width, int *height) {
     exit(1);
   }
   webcam_buffer = (unsigned char *) malloc(*width * *height * 3);
+  webcam_buffer_ptrs = (unsigned char **) malloc(*height * sizeof(*webcam_buffer_ptrs));
+  for (int i = 0; i < *height; ++i)
+    webcam_buffer_ptrs[i] = webcam_buffer + i * *width * 3;
   return webcam;
+}
+
+struct jerr {
+  struct jpeg_error_mgr e;
+  jmp_buf j;
+};
+
+void jerr_handler(j_common_ptr cinfo)
+{
+  struct jerr *jerr = (struct jerr *) cinfo->err;
+  longjmp(jerr->j, 1);
 }
 
 int read_webcam(int webcam, int width, int height) {
@@ -452,7 +469,28 @@ int read_webcam(int webcam, int width, int height) {
   if (-1 == v4l2_ioctl(webcam, VIDIOC_DQBUF, &buf)) {
     return 0;
   }
-  memcpy(webcam_buffer, webcam_buffers[buf.index].start, width * height * 3);
+
+  struct jpeg_decompress_struct cinfo;
+  struct jerr jerr;
+  cinfo.err = jpeg_std_error(&jerr.e);
+  jerr.e.error_exit = jerr_handler;
+  if (setjmp(jerr.j)) {
+    jpeg_destroy_decompress(&cinfo);
+    v4l2_ioctl(webcam, VIDIOC_QBUF, &buf);
+    return 0;
+  }
+  jpeg_create_decompress(&cinfo);
+  jpeg_mem_src(&cinfo, (const unsigned char*) webcam_buffers[buf.index].start, buf.length);
+  jpeg_read_header(&cinfo, 0);
+  jpeg_start_decompress(&cinfo);
+  if (cinfo.output_width == width && cinfo.output_height == height && cinfo.output_components == 3)
+    while (cinfo.output_scanline < cinfo.output_height)
+      jpeg_read_scanlines(&cinfo, webcam_buffer_ptrs + cinfo.output_scanline, cinfo.output_height);
+  else
+    fprintf(stderr, "ERR webcam format mismatch\n");
+  jpeg_finish_decompress(&cinfo);
+  jpeg_destroy_decompress(&cinfo);
+
   v4l2_ioctl(webcam, VIDIOC_QBUF, &buf);
   return 1;
 }
