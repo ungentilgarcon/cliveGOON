@@ -1,6 +1,6 @@
 all: live go.so visuals ascii.pgm
 
-live: live.c samples_s.s
+live: live.c
 	colorgcc -std=c99 -Wall -pedantic -Wextra -Wno-unused-parameter -O3 -mfpmath=sse -I. -o live live.c `pkg-config --cflags --libs jack` -ldl -lm
 
 go.so: go.c dsp.h dsp/*.h
