@@ -6,6 +6,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifdef __x86_64__
+#include <fenv.h>
+#endif
+
 #include <linux/limits.h>
 #include <sys/inotify.h>
 #include <dlfcn.h>
@@ -40,30 +44,51 @@ volatile int inprocesscb = 0;
 
 static int processcb(jack_nframes_t nframes, void *arg) {
   inprocesscb = 1; // race mitigation
+  // set floating point environment for denormal->0.0
+#ifdef __x86_64__
+  fenv_t fe;
+  fegetenv(&fe);
+  unsigned int old_mxcsr = fe.__mxcsr;
+  fe.__mxcsr |= 0x8040; // set DAZ and FTZ
+  fesetenv(&fe);
+#endif
+  // get jack buffers
   jack_default_audio_sample_t *in [CHANNELS];
   jack_default_audio_sample_t *out[CHANNELS];
   for (int c = 0; c < CHANNELS; ++c) {
     in [c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.in [c], nframes);
     out[c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out[c], nframes);
   }
+  // get callback
   callback *f = state.func;
+  // handle reloading
   if (state.reload) {
     int *reloaded = state.data;
     *reloaded = 1;
     state.reload = 0;
   }
+  // loop over samples
   for (jack_nframes_t i = 0; i < nframes; ++i) {
+    // to buffer
     float ini[CHANNELS];
     float outi[CHANNELS];
     for (int c = 0; c < CHANNELS; ++c) {
       ini [c] = in[c][i];
       outi[c] = 0;
     }
+    // callback
     /* int inhibit_reload = */ f(state.data, CHANNELS, ini, outi);
+    // from buffer
     for (int c = 0; c < CHANNELS; ++c) {
       out[c][i] = outi[c];
     }
   }
+  // restore floating point environment
+#ifdef __x86_64__
+  fe.__mxcsr = old_mxcsr;
+  fesetenv(&fe);
+#endif
+  // done
   inprocesscb = 0; // race mitigation
   return 0;
 }
