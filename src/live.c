@@ -171,9 +171,24 @@ int main(int argc, char **argv) {
     }
     free(ports);
   }
+  // watch for filesystem changes
+  int ino = inotify_init();
+  if (ino == -1) {
+    perror("inotify_init()");
+    return 1;
+  }
+  int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
+  if (wd == -1) {
+    perror("inotify_add_watch()");
+    return 1;
+  }
+  ssize_t buf_bytes = sizeof(struct inotify_event) + NAME_MAX + 1;
+  char *buf = malloc(buf_bytes);
+  // double-buffering stuff
   void *old_dl = 0;
   void *new_dl = 0;
   int which = 0;
+  // main loop
   while (1) {
 /*
 Double buffering to avoid glitches on reload.  Can't dlopen the same file
@@ -187,7 +202,7 @@ index.
     const char *copycmd[2] = { "cp -f ./go.so ./go.a.so", "cp -f ./go.so ./go.b.so" };
     const char *library[2] = { "./go.a.so", "./go.b.so" };
     if (system(copycmd[which])) {
-      fprintf(stderr, "huh? %s\n", copycmd[which]);
+      fprintf(stderr, "COPY COMMAND FAILED: '%s'\n", copycmd[which]);
     }
     if ((new_dl = dlopen(library[which], RTLD_NOW))) {
       callback *new_cb;
@@ -203,58 +218,53 @@ index.
         old_dl = new_dl;
         new_dl = 0;
         which = 1 - which;
-        fprintf(stderr, "HUP! %p\n", *(void **) (&new_cb));
+        fprintf(stderr, "RELOADED: '%p'\n", *(void **) (&new_cb));
       } else {
-        fprintf(stderr, "no go()!\n");
+        fprintf(stderr, "NO FUNCTION DEFINED: 'go()'\n");
         dlclose(new_dl);
       }
     } else {
       // another race condition: the .so disappeared before load
-      fprintf(stderr, "no %s!\n", library[which]);
+      fprintf(stderr, "FILE VANISHED: '%s'\n", library[which]);
       const char *err = dlerror();
       if (err) {
         fprintf(stderr, "%s\n", err);
       }
     }
-/*
-Watch for filesystem changes.  Possibly some race conditions here, as it
-seems some saves/recompiles get missed sometimes?
-*/
-    // watch .so for changes
-    int ino = inotify_init();
-    if (ino == -1) {
-      perror("inotify_init()");
-      return 1;
-    }
-    int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
-    if (wd == -1) {
-      perror("inotify_add_watch()");
-      return 1;
-    }
     // read events (blocking)
-    struct { struct inotify_event ev; char name[NAME_MAX + 1]; } buf;
     int done = 0;
     do {
-      ssize_t r = read(ino, &buf, sizeof(buf));
+      memset(buf, 0, buf_bytes);
+      ssize_t r = read(ino, buf, buf_bytes);
       if (r == -1) {
         perror("read()");
         sleep(1);
       } else {
-        if (r >= (ssize_t) sizeof(buf.ev) + buf.ev.len) {
-          if (buf.ev.mask & IN_CLOSE_WRITE) {
-            fprintf(stderr, "%s\n", buf.name);
-            if (0 == strcmp("go.so", buf.name)) {
+        char *bufp = buf;
+        while (bufp < buf + r)
+        {
+          struct inotify_event *ev = (struct inotify_event *) bufp;
+          bufp += sizeof(struct inotify_event) + ev->len;
+          if (ev->mask & IN_CLOSE_WRITE) {
+            fprintf(stderr, "FILE CHANGED: '%s'\n", ev->name);
+            if (0 == strcmp("go.so", ev->name)) {
               done = 1;
             }
-          }
-          if (r > (ssize_t) sizeof(buf.ev) + buf.ev.len) {
-            fprintf(stderr, "extra event!\n");
+            if (0 == strcmp("go.c", ev->name)) {
+              // recompile
+              system(
+                "git --no-pager diff --color ; "
+                "git add go.c ; "
+                "git commit -m \"go $(date --iso=s)\" ; "
+                "make --quiet"
+              );
+            }
           }
         }
       }
     } while (! done);
-    close(ino);
   }
   // never reached
+  close(ino);
   return 0;
 }
