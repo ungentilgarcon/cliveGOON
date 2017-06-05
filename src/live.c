@@ -202,7 +202,7 @@ index.
     const char *copycmd[2] = { "cp -f ./go.so ./go.a.so", "cp -f ./go.so ./go.b.so" };
     const char *library[2] = { "./go.a.so", "./go.b.so" };
     if (system(copycmd[which])) {
-      fprintf(stderr, "COPY COMMAND FAILED: '%s'\n", copycmd[which]);
+      fprintf(stderr, "\x1b[31;1mCOPY COMMAND FAILED: '%s'\x1b[0m\n", copycmd[which]);
     }
     if ((new_dl = dlopen(library[which], RTLD_NOW))) {
       callback *new_cb;
@@ -218,17 +218,17 @@ index.
         old_dl = new_dl;
         new_dl = 0;
         which = 1 - which;
-        fprintf(stderr, "RELOADED: '%p'\n", *(void **) (&new_cb));
+        fprintf(stderr, "\x1b[32;1mRELOADED: '%p'\x1b[0m\n", *(void **) (&new_cb));
       } else {
-        fprintf(stderr, "NO FUNCTION DEFINED: 'go()'\n");
+        fprintf(stderr, "\x1b[31;1mNO FUNCTION DEFINED: 'go()'\x1b[0m\n");
         dlclose(new_dl);
       }
     } else {
       // another race condition: the .so disappeared before load
-      fprintf(stderr, "FILE VANISHED: '%s'\n", library[which]);
+      fprintf(stderr, "\x1b[31;1mFILE VANISHED: '%s'\x1b[0m\n", library[which]);
       const char *err = dlerror();
       if (err) {
-        fprintf(stderr, "%s\n", err);
+        fprintf(stderr, "\x1b[31;1m%s\x1b[0m\n", err);
       }
     }
     // read events (blocking)
@@ -246,7 +246,7 @@ index.
           struct inotify_event *ev = (struct inotify_event *) bufp;
           bufp += sizeof(struct inotify_event) + ev->len;
           if (ev->mask & IN_CLOSE_WRITE) {
-            fprintf(stderr, "FILE CHANGED: '%s'\n", ev->name);
+            fprintf(stderr, "\x1b[32;1mFILE CHANGED: '%s'\x1b[0m\n", ev->name);
             if (0 == strcmp("go.so", ev->name)) {
               done = 1;
             }
