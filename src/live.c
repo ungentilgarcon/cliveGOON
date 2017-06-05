@@ -253,8 +253,8 @@ index.
             if (0 == strcmp("go.c", ev->name)) {
               // recompile
               system(
-                "git --no-pager diff --color ; "
                 "git add go.c ; "
+                "git --no-pager diff --cached --color ; "
                 "git commit -m \"go $(date --iso=s)\" ; "
                 "make --quiet"
               );
