@@ -88,7 +88,7 @@ static inline double TAN(double x)
 
 static inline double TANH(double x)
 {
-  x = CLAMP(x, -4.0, 4.0);
+//  x = CLAMP(x, -4.0, 4.0);
   // [5/6] Padé approximant
   double x2 = x * x;
   double a = x * (10395.0 + x2 * (1260.0 + x2 * 21.0));
