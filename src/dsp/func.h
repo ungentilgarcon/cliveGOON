@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#define   likely(x) __builtin_expect((x),1)
+#define unlikely(x) __builtin_expect((x),0)
+
 #define pi 3.141592653589793
 #define twopi 6.283185307179586
 
