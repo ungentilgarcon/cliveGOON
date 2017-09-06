@@ -2,6 +2,7 @@
 #define DSP_FUNC_H 1
 
 #include <math.h>
+#include <stdbool.h>
 #include <stdlib.h>
 
 #define pi 3.141592653589793
