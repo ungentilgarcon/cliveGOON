@@ -42,12 +42,7 @@ void compress(double out[2], COMPRESS *s, double hiphz, double lophz1, double lo
   h[0] = lop(&s->lop[0], h[0], lophz1);
   h[1] = lop(&s->lop[1], h[1], lophz1);
   double env = lop(&s->lop[2], sqrt(fmax(0, h[0] + h[1])), lophz2);
-  double g[2] =
-    { in[0] / env
-    , in[1] / env
-    };
-  if (isnan(g[0]) || isinf(g[0])) { g[0] = 0; }
-  if (isnan(g[1]) || isinf(g[1])) { g[1] = 0; }
+  double env0 = env;
   env = rmstodb(env);
   if (env > db) {
     env = db + (env - db) / 4;
@@ -55,9 +50,11 @@ void compress(double out[2], COMPRESS *s, double hiphz, double lophz1, double lo
     env = db;
   }
   env = 0.25 * dbtorms(env) / dbtorms((100 - db) / 4 + db);
-  if (isnan(env) || isinf(env)) { env = 0; }
-  out[0] = tanh(g[0] * env);
-  out[1] = tanh(g[1] * env);
+  double gain = env / env0;
+  if (isnan(gain) || isinf(gain)) { gain = 0; }
+  gain = clamp(gain, 0, 1.0e6);
+  out[0] = tanh(in[0] * gain);
+  out[1] = tanh(in[1] * gain);
 }
 
 // reverb

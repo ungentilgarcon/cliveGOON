@@ -3,6 +3,7 @@ visuals
 *.so
 *.wav
 *.ogg
+*.mp3
 *.pgm
 *.html
 *.txt

@@ -6,6 +6,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifdef __x86_64__
+#include <fenv.h>
+#endif
+
 #include <linux/limits.h>
 #include <sys/inotify.h>
 #include <dlfcn.h>
@@ -40,30 +44,51 @@ volatile int inprocesscb = 0;
 
 static int processcb(jack_nframes_t nframes, void *arg) {
   inprocesscb = 1; // race mitigation
+  // set floating point environment for denormal->0.0
+#ifdef __x86_64__
+  fenv_t fe;
+  fegetenv(&fe);
+  unsigned int old_mxcsr = fe.__mxcsr;
+  fe.__mxcsr |= 0x8040; // set DAZ and FTZ
+  fesetenv(&fe);
+#endif
+  // get jack buffers
   jack_default_audio_sample_t *in [CHANNELS];
   jack_default_audio_sample_t *out[CHANNELS];
   for (int c = 0; c < CHANNELS; ++c) {
     in [c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.in [c], nframes);
     out[c] = (jack_default_audio_sample_t *) jack_port_get_buffer(state.out[c], nframes);
   }
+  // get callback
   callback *f = state.func;
+  // handle reloading
   if (state.reload) {
     int *reloaded = state.data;
     *reloaded = 1;
     state.reload = 0;
   }
+  // loop over samples
   for (jack_nframes_t i = 0; i < nframes; ++i) {
+    // to buffer
     float ini[CHANNELS];
     float outi[CHANNELS];
     for (int c = 0; c < CHANNELS; ++c) {
       ini [c] = in[c][i];
       outi[c] = 0;
     }
+    // callback
     /* int inhibit_reload = */ f(state.data, CHANNELS, ini, outi);
+    // from buffer
     for (int c = 0; c < CHANNELS; ++c) {
       out[c][i] = outi[c];
     }
   }
+  // restore floating point environment
+#ifdef __x86_64__
+  fe.__mxcsr = old_mxcsr;
+  fesetenv(&fe);
+#endif
+  // done
   inprocesscb = 0; // race mitigation
   return 0;
 }
@@ -146,9 +171,24 @@ int main(int argc, char **argv) {
     }
     free(ports);
   }
+  // watch for filesystem changes
+  int ino = inotify_init();
+  if (ino == -1) {
+    perror("inotify_init()");
+    return 1;
+  }
+  int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
+  if (wd == -1) {
+    perror("inotify_add_watch()");
+    return 1;
+  }
+  ssize_t buf_bytes = sizeof(struct inotify_event) + NAME_MAX + 1;
+  char *buf = malloc(buf_bytes);
+  // double-buffering stuff
   void *old_dl = 0;
   void *new_dl = 0;
   int which = 0;
+  // main loop
   while (1) {
 /*
 Double buffering to avoid glitches on reload.  Can't dlopen the same file
@@ -162,7 +202,7 @@ index.
     const char *copycmd[2] = { "cp -f ./go.so ./go.a.so", "cp -f ./go.so ./go.b.so" };
     const char *library[2] = { "./go.a.so", "./go.b.so" };
     if (system(copycmd[which])) {
-      fprintf(stderr, "huh? %s\n", copycmd[which]);
+      fprintf(stderr, "\x1b[31;1mCOPY COMMAND FAILED: '%s'\x1b[0m\n", copycmd[which]);
     }
     if ((new_dl = dlopen(library[which], RTLD_NOW))) {
       callback *new_cb;
@@ -178,58 +218,53 @@ index.
         old_dl = new_dl;
         new_dl = 0;
         which = 1 - which;
-        fprintf(stderr, "HUP! %p\n", *(void **) (&new_cb));
+        fprintf(stderr, "\x1b[32;1mRELOADED: '%p'\x1b[0m\n", *(void **) (&new_cb));
       } else {
-        fprintf(stderr, "no go()!\n");
+        fprintf(stderr, "\x1b[31;1mNO FUNCTION DEFINED: 'go()'\x1b[0m\n");
         dlclose(new_dl);
       }
     } else {
       // another race condition: the .so disappeared before load
-      fprintf(stderr, "no %s!\n", library[which]);
+      fprintf(stderr, "\x1b[31;1mFILE VANISHED: '%s'\x1b[0m\n", library[which]);
       const char *err = dlerror();
       if (err) {
-        fprintf(stderr, "%s\n", err);
+        fprintf(stderr, "\x1b[31;1m%s\x1b[0m\n", err);
       }
     }
-/*
-Watch for filesystem changes.  Possibly some race conditions here, as it
-seems some saves/recompiles get missed sometimes?
-*/
-    // watch .so for changes
-    int ino = inotify_init();
-    if (ino == -1) {
-      perror("inotify_init()");
-      return 1;
-    }
-    int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
-    if (wd == -1) {
-      perror("inotify_add_watch()");
-      return 1;
-    }
     // read events (blocking)
-    struct { struct inotify_event ev; char name[NAME_MAX + 1]; } buf;
     int done = 0;
     do {
-      ssize_t r = read(ino, &buf, sizeof(buf));
+      memset(buf, 0, buf_bytes);
+      ssize_t r = read(ino, buf, buf_bytes);
       if (r == -1) {
         perror("read()");
         sleep(1);
       } else {
-        if (r >= (ssize_t) sizeof(buf.ev) + buf.ev.len) {
-          if (buf.ev.mask & IN_CLOSE_WRITE) {
-            fprintf(stderr, "%s\n", buf.name);
-            if (0 == strcmp("go.so", buf.name)) {
+        char *bufp = buf;
+        while (bufp < buf + r)
+        {
+          struct inotify_event *ev = (struct inotify_event *) bufp;
+          bufp += sizeof(struct inotify_event) + ev->len;
+          if (ev->mask & IN_CLOSE_WRITE) {
+            fprintf(stderr, "\x1b[32;1mFILE CHANGED: '%s'\x1b[0m\n", ev->name);
+            if (0 == strcmp("go.so", ev->name)) {
               done = 1;
             }
-          }
-          if (r > (ssize_t) sizeof(buf.ev) + buf.ev.len) {
-            fprintf(stderr, "extra event!\n");
+            if (0 == strcmp("go.c", ev->name)) {
+              // recompile
+              system(
+                "git add go.c ; "
+                "git --no-pager diff --cached --color ; "
+                "git commit -m \"go $(date --iso=s)\" ; "
+                "make --quiet"
+              );
+            }
           }
         }
       }
     } while (! done);
-    close(ino);
   }
   // never reached
+  close(ino);
   return 0;
 }
