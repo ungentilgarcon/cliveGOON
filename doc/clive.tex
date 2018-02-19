@@ -1,0 +1,411 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{lac2018}
+\sloppy
+\newenvironment{contentsmall}{\small}
+
+\usepackage{listings}
+\lstset{breaklines=true}
+\lstset{language=C}
+\lstset{basicstyle=\small\ttfamily}
+\lstset{extendedchars=true}
+\lstset{tabsize=1}
+\lstset{columns=fixed}
+\lstset{showspaces=false}
+\lstset{showstringspaces=true}
+\lstset{numbers=left}
+\lstset{xleftmargin=2em}  
+\lstset{stepnumber=1}
+\lstset{numbersep=5pt}
+\lstset{numberstyle=\footnotesize\ttfamily}
+\lstset{captionpos=t}
+\lstset{breaklines=true}
+\lstset{breakatwhitespace=true}
+\lstset{breakautoindent=true}
+\lstset{linewidth=\columnwidth}
+
+\usepackage[hidelinks]{hyperref}
+
+\title{Live-coding Audio in C}
+
+%see lac2018.sty for how to format multiple authors!
+\author
+{Claude HEILAND-ALLEN
+\\ unaffiliated
+\\ claude@mathr.co.uk
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\begin{contentsmall}
+
+  An audio live-coding skeleton is presented, implemented in C and adaptable to
+  languages that expose the C ABI from shared libraries.
+
+  The skeleton watches a directory for changes, recompiling changed sources and
+  reloading changed shared objects. The shared object defines an audio
+  processing callback. The skeleton maintains a memory region between reloads,
+  allowing callback state to be preserved so that audio processing can continue
+  uninterrupted.
+
+\end{contentsmall}
+\end{abstract}
+
+\keywords{
+\begin{contentsmall}
+live-coding, audio processing, code reloading
+\end{contentsmall}
+}
+
+\section{Motivation}\label{motivation}
+
+(At least) two popular music software packages allow live-coding.
+Pure-data allows the manipulation of audio processing graphs at runtime,
+but live-coding requires careful preparation as there is no edit/commit
+cycle: every change is live as soon as it is made.  Supercollider takes a
+different approach, running selected code only when a certain key
+combination is pressed.  However, Supercollider DSP code runs on a server
+distinct from its language, and compiled synths can't be modified once
+they are running.
+
+The main goal of Clive is to be able to edit digital synthesis algorithms
+while they are running, with a two phase edit/commit cycle: code can be
+edited freely, until it is saved to disk, at which point it is re-compiled
+and (if successful) re-loaded into an active audio processing engine.  The
+reasons for using the C programming language are familiarity to the author,
+precise control of memory layout of data structures allowing code reload
+with state preservation, and speed of compilation (relative to higher-level
+languages like C++).
+
+Performance with Clive typically involves pre-preparation, at least of
+common unit generators like oscillators and filters, perhaps higher-level
+effects like chorus or dynamic range compression, extending to more-complete
+compositions with complex data flow.  The live-coding aspect involves editing
+a file in the performer's favourite text editor, with the act of saving with
+Ctrl-S or other shortcut being timed to allow the new code to start executing
+after the latency of compilation.
+
+\section{Implementation}\label{implementation}
+
+\subsection{The skeleton}\label{the-skeleton}
+
+The live engine starts a JACK client, whose audio processing function is
+a thin wrapper around a \lstinline!callback! function pointer. The
+function pointer is initially set to a function that fills its output
+buffers with silence. The main program watches the current directory for
+changes, recompiling changed sources and reloading a shared library
+(named \lstinline!go.so!) on changes. The shared library defines a
+symbol \lstinline!go! matching the \lstinline!callback_t! interface. The
+callback is set to the address of this function. The callback is passed
+a pointer to a memory area that is preserved between code reloads.
+
+\begin{lstlisting}[language=C, caption={The skeleton}, label=lskeleton]
+typedef void (*callback_t)(void *, float *, int, float *, int);
+volatile callback_t callback = silence_callback;
+void *data;
+int process(jack_nframes_t n, void *arg) {
+ float in[nin];
+ float out[nout];
+ // ... get JACK buffers
+ for (int i = 0; i < n; ++i) {
+  // ... copy buffers to in
+  callback(data, in, nin, out, nout);
+  // ... copy out to buffers
+ }
+ return 0;
+}
+int main() {
+ data = calloc(1, bytes);
+ load_library("go.so");
+ // ... launch JACK client
+ // the following is pseudo-code
+ watch w = watch_directory(".");
+ event e;
+ while (( e = wait_event(w) )) {
+  if (has_changed(e, "go.so"))
+   load_library("go.so");
+  if (has_changed(e, "go.c"))
+   recompile("go.c");
+ }
+ return 0;
+}
+\end{lstlisting}
+
+\subsection{Dynamically reload
+libraries}\label{dynamically-reload-libraries}
+
+The POSIX.1-2001 \lstinline!dl! interface is used to load shared libraries
+at runtime~\cite{DL}. The library is loaded with \lstinline!dlopen!, the
+callback function symbol address is found with \lstinline!dlsym!, and when
+no longer needed the code can be unloaded with \lstinline!dlclose!.  The type
+cast gymnastics on line 9 are to avoid a warning in strict ISO C99 mode.
+
+\begin{lstlisting}[language=C, caption={Using libdl}, label=llibdl]
+void *old_library = 0;
+void *new_library = 0;
+void load_library(const char *name) {
+ if (! name)
+  return;
+ if (! (new_library = dlopen(name, RTLD_NOW)))
+  return;
+ callback_t *new_callback;
+ *(void **) (&new_callback) = dlsym(new_library, "go");
+ if (new_callback) {
+  set_callback(new_callback);
+  // unload old library
+  if (old_library)
+   dlclose(old_library);
+  old_library = new_library;
+  new_library = 0;
+ } else {
+  dlclose(new_library);
+  new_library = 0;
+ }
+}
+\end{lstlisting}
+
+\subsection{Mitigate races}\label{mitigate-races}
+
+There is a race condition, especially problematic on multi-core
+architectures: the old code must not be unloaded while the JACK callback
+is still running it, otherwise the process will crash. To mitigate this
+risk (though not prevent it entirely), a flag is added that makes the
+main process spin until the current DSP block's JACK processing is
+finished. The old library is probably safe to unload after
+\lstinline!set_callback! has returned. To avoid a total stop to the live
+performace in the unlikely event of this crash, a shell wrapper script
+relaunches the engine automatically.
+
+\begin{lstlisting}[language=C, caption={Race mitigation}, label=lrace]
+volatile bool processing = false;
+int process(jack_nframes_t n, void *arg) {
+ processing = true;
+ // ...
+ processing = false;
+ return 0;
+}
+void set_callback(callback_t new_callback) {
+ while (processing)
+  ;
+ callback = new_callback;
+}
+\end{lstlisting}
+
+\subsection{Defeat caches}\label{defeat-caches}
+
+Unfortunately \lstinline!libdl! performs rather aggressive caching,
+meaning that a library of the same name is not reloaded if it is already
+open, even if its contents have changed.
+
+A first try was to unload the old code and load the new code, hoping
+that it would be quick enough to avoid audio dropouts (the callback
+function pointer was set to silence before unloading to avoid a crash).
+The dropouts were too severe to make this viable in a performance
+situation.
+
+A second attempt was to use two symlinks for double-buffering, but even
+this does not defeat the cache. A real file copy appears to be
+necessary, and finally the current version copies alternately to two
+separate files in a double-buffering scheme.
+
+\begin{lstlisting}[language=C, caption={Defeating caches by copying}, label=lcache]
+const char *copy[2] =
+ { "cp -f ./go.so ./go.a.so"
+ , "cp -f ./go.so ./go.b.so" };
+const char *library[2] =
+ { "./go.a.so", "./go.b.so" };
+int which = 0;
+void copy_library() {
+ if (! system(copy[which]))
+  return library[which];
+ else
+  return 0;
+}
+void load_library(const char *name) {
+ // ...
+ if (new_callback) {
+  which = 1 - which;
+  // ...
+ }
+}
+int main() {
+ // ...
+  if (has_changed(e, "go.so"))
+   load_library(copy_library());
+}
+\end{lstlisting}
+
+\subsection{Notify reloads}\label{notify-reloads}
+
+It can be useful when live programming audio to perform initialization
+once only. To that end, clive mandates that the first word of the memory
+area is an \lstinline!int!, that is set to 1 when the code is reloaded.
+The callback code is responsible for clearing it, necessary to detect
+subsequent reloads.
+
+\begin{lstlisting}[language=C, caption={Reload notification}, label=lreload]
+volatile bool reloaded = false;
+int process(jack_nframes_t n, void *arg) {
+ if (reloaded) {
+  int *p = data;
+  *p = 1;
+  reloaded = 0;
+ }
+ // ...
+ return 0;
+}
+void set_callback(callback_t new_callback) {
+ // ...
+ reloaded = true;
+}
+\end{lstlisting}
+
+\subsection{Watch for changes}\label{watch-for-changes}
+
+On Linux, the filesystem can be monitored for changes using
+\lstinline!inotify!~\cite{INOTIFY}. The function
+\lstinline!inotify_add_watch! is used to check for file close events, of
+files that were opened for writing. The \lstinline!inotify_event!
+structure contains the name of the file that changed, which is compared
+to two cases: if the source \lstinline!go.c! has changed, recompile it;
+if the library \lstinline!go.so! has changed, reload it. Hopefully the
+first case triggers the second case, otherwise the live coder should
+check the terminal for compilation error messages.
+
+It is important to start watching before the main loop, rather than
+stopping and starting repeatedly within the loop, lest events are missed
+between loop iterations. To support languages other than C, it is
+necessary to modify line 27 of Listing \ref{linotify} to reference the
+new source file, and add the approriate compilation commands to the
+\lstinline!Makefile!.
+
+\begin{lstlisting}[language=C, caption={Using inotify}, label=linotify]
+int main() {
+ // ...
+ int ino = inotify_init();
+ if (ino == -1) return 1;
+ int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
+ if (wd == -1) return 1;
+ ssize_t buf_bytes = sizeof(struct inotify_event) + NAME_MAX + 1;
+ char *buf = malloc(buf_bytes);
+ while (true) {
+  load_library(copy_library());
+  // read events (blocking)
+  bool library_changed = false;
+  while (! library_changed) {
+   memset(buf, 0, buf_bytes);
+   ssize_t r = read(ino, buf, buf_bytes);
+   if (r == -1)
+    sleep(1);
+   else {
+    char *bufp = buf;
+    while (bufp < buf + r) {
+     struct inotify_event *ev = (struct inotify_event *) bufp;
+     bufp += sizeof(struct inotify_event) + ev->len;
+     if (ev->mask & IN_CLOSE_WRITE) {
+      if (0 == strcmp("go.so", ev->name))
+       // reload
+       library_changed = true;
+      if (0 == strcmp("go.c", ev->name))
+       // recompile
+       system("make --quiet");
+     }
+    }
+   }
+  }
+ }
+ close(ino);
+ return 0;
+}
+\end{lstlisting}
+
+\subsection{Squash denormals}\label{squash-denormals}
+
+A common problem in audio processing on \lstinline!x86_64! architectures
+is the large increased cost of processing denormal floating point
+numbers when recursive algorithms decay to zero. This is achieved in
+clive by setting the \lstinline!DAZ! (denormals-are-zero) and
+\lstinline!FTZ! (flush-to-zero) CPU flags~\cite{DAZFTZ}, and ensuring
+that the shared library code is compiled with the \lstinline!gcc! flag
+\lstinline!-mfpmath=sse! which makes calculations use the SSE unit.
+
+\begin{lstlisting}[language=C, caption={Setting DAZ and FTZ}, label=ldenormal]
+int process(jack_nframes_t n, void *arg) {
+#ifdef __x86_64__
+ fenv_t fe;
+ fegetenv(&fe);
+ unsigned int old_mxcsr = fe.__mxcsr;
+ fe.__mxcsr |= 0x8040;
+ fesetenv(&fe);
+#endif
+ // ...
+#ifdef __x86_64__
+ fe.__mxcsr = old_mxcsr;
+ fesetenv(&fe);
+#endif
+ return 0;
+}
+\end{lstlisting}
+
+\section{Example}\label{example}
+
+Thus far in this paper all the code presented has been from the live
+engine. To remedy this, here is a short callback example, presenting
+a simple metronome tone:
+
+\begin{lstlisting}[language=C, caption={Metronome example}, label=lexample]
+#include <math.h>
+#define SR 48000
+#define PI 3.141592653589793
+double wrap(double x) {
+  return x - floor(x);
+}
+typedef struct { double phase; } PHASOR;
+double phasor(PHASOR *s, double hz) {
+  return s->phase = wrap(s->phase + hz / SR);
+}
+typedef struct {
+  int reloaded;
+  PHASOR beat;
+  PHASOR tone;
+} S;
+extern void go(S *s, float *in, int nin, float *out, int nout) {
+  double beat = phasor(&s->beat, 120 / 60.0) < 0.25;
+  double tone = sin(2 * PI * phasor(&s->tone, 1000));
+  double metronome = beat * tone;
+  for (int c = 0; c < nout; ++c)
+    out[c] = metronome;
+}
+\end{lstlisting}
+
+\section{Future work}\label{future-work}
+
+The Bela~\cite{BELA} platform is interesting for low-latency processing.
+Clive could be adapted to cross-compile into a device directory mounted on
+the host, with the engine split into two parts (device to reload library
+code, and host to recompile source code).
+
+The OpenGL graphics library is interesting for programmable shaders.  Clive
+could be adapted to load and compile GLSL source code for live-coding visuals.
+However this would not display the source code text along with the visuals,
+without more work.
+
+\section{Conclusion}\label{conclusion}
+
+A live coding system for audio processing in C has been presented. The
+author has performed with it many times since its first version in 2011,
+including both seated events and club-style Algorave situations, as well
+as sessions at home.
+
+The code and some session audio+diff-casts can be found at
+\begin{itemize}
+\item \url{https://code.mathr.co.uk/clive}
+\item \url{https://mathr.co.uk/clive}
+\end{itemize}
+respectively.
+
+\bibliographystyle{acl}
+\bibliography{clive}
+
+\end{document}
