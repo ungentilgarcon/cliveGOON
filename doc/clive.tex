@@ -41,7 +41,9 @@
 \begin{contentsmall}
 
   An audio live-coding skeleton is presented, implemented in C and adaptable to
-  languages that expose the C ABI from shared libraries.
+  languages that expose the C ABI from shared libraries.  The aim is to support
+  a two-phase edit-commit coding cycle allowing long-lived signal processing
+  graphs to be modified.
 
   The skeleton watches a directory for changes, recompiling changed sources and
   reloading changed shared objects. The shared object defines an audio
@@ -67,7 +69,8 @@ cycle: every change is live as soon as it is made.  Supercollider takes a
 different approach, running selected code only when a certain key
 combination is pressed.  However, Supercollider DSP code runs on a server
 distinct from its language, and compiled synths can't be modified once
-they are running.
+they are running, beyond setting variables or re-ordering synths -- the code
+within each synth is immutable.
 
 The main goal of Clive is to be able to edit digital synthesis algorithms
 while they are running, with a two phase edit/commit cycle: code can be
@@ -330,23 +333,23 @@ clive by setting the \lstinline!DAZ! (denormals-are-zero) and
 that the shared library code is compiled with the \lstinline!gcc! flag
 \lstinline!-mfpmath=sse! which makes calculations use the SSE unit.
 
-\begin{lstlisting}[language=C, caption={Setting DAZ and FTZ}, label=ldenormal]
-int process(jack_nframes_t n, void *arg) {
-#ifdef __x86_64__
- fenv_t fe;
- fegetenv(&fe);
- unsigned int old_mxcsr = fe.__mxcsr;
- fe.__mxcsr |= 0x8040;
- fesetenv(&fe);
-#endif
- // ...
-#ifdef __x86_64__
- fe.__mxcsr = old_mxcsr;
- fesetenv(&fe);
-#endif
- return 0;
-}
-\end{lstlisting}
+%\begin{lstlisting}[language=C, caption={Setting DAZ and FTZ}, label=ldenormal]
+%int process(jack_nframes_t n, void *arg) {
+%#ifdef __x86_64__
+% fenv_t fe;
+% fegetenv(&fe);
+% unsigned int old_mxcsr = fe.__mxcsr;
+% fe.__mxcsr |= 0x8040;
+% fesetenv(&fe);
+%#endif
+% // ...
+%#ifdef __x86_64__
+% fe.__mxcsr = old_mxcsr;
+% fesetenv(&fe);
+%#endif
+% return 0;
+%}
+%\end{lstlisting}
 
 \section{Example}\label{example}
 
@@ -381,15 +384,25 @@ extern void go(S *s, float *in, int nin, float *out, int nout) {
 
 \section{Future work}\label{future-work}
 
-The Bela~\cite{BELA} platform is interesting for low-latency processing.
+Clive processes one sample at a time, which is not necessarily the most
+efficient way to process audio.  It may be useful to add unit generators to
+support reblocking, alongside vector operations, to Clive's library.  This
+reblocking would be necessary if FFT operations were to be supported,
+which would also benefit from reblocking with overlap.
+
+The Bela~\cite{BELA} platform is interesting for low-latency audio processing.
 Clive could be adapted to cross-compile into a device directory mounted on
 the host, with the engine split into two parts (device to reload library
-code, and host to recompile source code).
+code, and host to recompile source code).  Bela also supports electronic
+connections (both analogue and digital pins), which would be nice to expose
+to Clive callbacks.
 
 The OpenGL graphics library is interesting for programmable shaders.  Clive
-could be adapted to load and compile GLSL source code for live-coding visuals.
-However this would not display the source code text along with the visuals,
-without more work.
+could be adapted to load and compile GLSL source code for live-coding visuals,
+perhaps focusing on fragment shaders similar to Fragmentarium~\cite{FRAG}.
+A way for Clive's audio processing callbacks to send control data to OpenGL
+visualisations would allow tight audio-visual synchronisation.
+
 
 \section{Conclusion}\label{conclusion}
 
