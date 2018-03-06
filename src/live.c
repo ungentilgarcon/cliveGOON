@@ -255,7 +255,7 @@ index.
               system(
                 "git add go.c ; "
                 "git --no-pager diff --cached --color ; "
-                "git commit -m \"go $(date --iso=s)\" ; "
+                "git commit -uno -m \"go $(date --iso=s)\" ; "
                 "make --quiet"
               );
             }
