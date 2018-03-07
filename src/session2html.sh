@@ -118,10 +118,8 @@ EOF
 <source src="${branch}.ogg" type="audio/ogg; codecs=vorbis">
 </audio>
 <div class='commit' id='commit-intro'>
-<h2><a href="http://code.mathr.co.uk/clive" title="clive">clive</a></h2>
-<p>clive is a C audio live-coding skeleton.   It allows you to hot-swap
-DSP processing callbacks, providing not much more than automatic C
-code recompilation, object code reloading, and state preservation.</p>
+<h2><a href="https://code.mathr.co.uk/clive" title="clive" target="_blank">clive</a></h2>
+<p>a C audio live-coding skeleton</p>
 </div>
 EOF
   cat diffs.html &&
