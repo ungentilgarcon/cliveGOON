@@ -62,6 +62,7 @@ const char *text_frag =
 "uniform sampler2D webcam;\n"
 "uniform sampler2D text;\n"
 "uniform sampler2D ascii;\n"
+"uniform vec2 webcam_size;\n"
 "uniform vec2 screen_size;\n"
 "uniform vec2 text_size;\n"
 "uniform vec3 hue_shift;\n"
@@ -74,7 +75,7 @@ const char *text_frag =
 "void main() {\n"
 "  float screen_aspect = screen_size.x / screen_size.y;\n"
 "  float text_aspect = text_size.x / text_size.y;\n"
-"  float webcam_aspect = float(textureSize(webcam, 0).x) / float(textureSize(webcam, 0).y);\n"
+"  float webcam_aspect = webcam_size.x / webcam_size.y;\n"
 "  vec2 webcam_coord = coord / screen_size;\n"
 "  webcam_coord -= vec2(0.5);\n"
 "  if (webcam_aspect < screen_aspect) {\n"
@@ -294,6 +295,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   GLint ipos = glGetAttribLocation(program, "pos");
   GLint itc = glGetAttribLocation(program, "tc");
   GLint u_screen_size = glGetUniformLocation(program, "screen_size");
+  GLint u_webcam_size = glGetUniformLocation(program, "webcam_size");
   u_text_size = glGetUniformLocation(program, "text_size");
   GLint u_webcam = glGetUniformLocation(program, "webcam");
   GLint u_ascii = glGetUniformLocation(program, "ascii");
@@ -306,6 +308,7 @@ void initialize_gl(int screen_width, int screen_height, int webcam_width, int we
   glUniform1i(u_text, 1);
   glUniform1i(u_ascii, 2);
   glUniform2f(u_screen_size, screen_width, screen_height);
+  glUniform2f(u_webcam_size, webcam_width, webcam_height);
   GLuint vao;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
