@@ -1,5 +1,8 @@
 all: paper.pdf
 
+clean:
+	-rm paper.aux paper.bbl paper.blg paper.log paper.out
+
 %.pdf: %.tex %.bib
 	pdflatex $*
 	bibtex   $*
