@@ -9,5 +9,8 @@ clean:
 	pdflatex $*
 	pdflatex $*
 
+%.pdf: %.md
+	pandoc --slide-level 2 -t beamer $*.md -o $*.pdf
+
 #paper.md.tex: paper.md
 #	pandoc -f markdown+backtick_code_blocks+citations -t latex --listings --highlight-style=pygments -o paper.md.tex paper.md
