@@ -1,4 +1,4 @@
-all: clive.pdf
+all: paper.pdf
 
 %.pdf: %.tex %.bib
 	pdflatex $*
@@ -6,5 +6,5 @@ all: clive.pdf
 	pdflatex $*
 	pdflatex $*
 
-#clive.md.tex: clive.md
-#	pandoc -f markdown+backtick_code_blocks+citations -t latex --listings --highlight-style=pygments -o clive.md.tex clive.md
+#paper.md.tex: paper.md
+#	pandoc -f markdown+backtick_code_blocks+citations -t latex --listings --highlight-style=pygments -o paper.md.tex paper.md
