@@ -196,4 +196,38 @@ static inline double moog(MOOG *m, double audio, double frequency, double resona
   return y;
 }
 
+// one-pole one-zero low pass filter designed in the Z plane
+
+typedef struct {
+  double x, y;
+} LOP1;
+
+static inline double lop1(LOP1 *s, double x, double hz)
+{
+  const double w = twopi * clamp(fabs(hz / SR), 0, 0.5);
+  const double a = (1 - sin(w)) / cos(w);
+  const double b = (1 - a) * 0.5;
+  const double y = b * (x + s->x) + a * s->y;
+  s->x = x;
+  s->y = y;
+  return y;
+}
+
+// one-pole one-zero high pass filter designed in the Z plane
+
+typedef struct {
+  double x, y;
+} HIP1;
+
+static inline double hip1(HIP1 *s, double x, double hz)
+{
+  const double w = twopi * clamp(fabs(hz / SR), 0, 0.5);
+  const double a = (1 - sin(w)) / cos(w);
+  const double b = (1 + a) * 0.5;
+  const double y = b * (x - s->x) + a * s->y;
+  s->x = x;
+  s->y = y;
+  return y;
+}
+
 #endif

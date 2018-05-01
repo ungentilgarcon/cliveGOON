@@ -1,5 +1,5 @@
 #!/bin/bash
-for c in $(cat /proc/cpuinfo | grep processor | sed "s/processor\t: //")
+for c in $(cat /proc/cpuinfo | grep "^processor" | sed "s/processor\t: //")
 do
   sudo cpufreq-set -c "${c}" -g performance
 done
