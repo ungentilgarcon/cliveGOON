@@ -1,7 +1,7 @@
 ---
 title: Live-coding Audio in C
 author: Claude Heiland-Allen
-date: 2018-04-10
+date: 2018-05-02
 classoption: aspectratio=149
 fontfamily: lato
 fontfamilyoptions: default
@@ -10,152 +10,17 @@ fontsize: 14pt
 
 ## Overview
 
-- Coding Audio In C
+- Motivation
 
-- Live-coding Audio
+- JACK Audio
 
-- Where Next?
+- Dynamic Reloading
 
-# Coding Audio In C
+- Detecting File Changes
 
-## C Programming Language
+- Future Work
 
-- Used to implement UNIX in the 1970s
-
-- Fast to compile
-
-- Fast at runtime
-
-## Audio DSP Environments
-
-- Digital Signal Processing
-
-- Pure-data is implemented in C
-
-- SuperCollider3 is implemented in C++
-
-## Audio Processing
-
-- Example: one-pole low-pass filter
-
-- Inputs: audio $x_n$, frequency $f_n$
-
-- Output: audio $y_n$
-
-- State: previous output audio sample $y_{n - 1}$
-
-## Filter Equation
-
-$$
-\begin{aligned}
-c_n &= 2 \pi \frac{f_n}{SR} \\
-y_n &= c_n x_n + (1 - c_n) y_{n - 1}
-\end{aligned}
-$$
-
-## Filter Implementation
-
-\fontsize{12pt}{13}\selectfont
-
-```C
-typedef struct {
-  double y;
-} LOP;
-
-double lop(LOP *s, double x, double hz) {
-  double c = clamp(twopi * hz / SR, 0, 1);
-  return s->y = mix(x, s->y, 1 - c);
-}
-```
-
-## Filter Usage
-
-\fontsize{10pt}{11}\selectfont
-
-```C
-#define SR 48000
-#include "dsp.h"
-
-typedef struct {
-  int reloaded;
-  LOP l[2]; // state declaration
-} S;
-
-int go(S *s, int channels, const float *in, float *out) {
-  for (int c = 0; c < channels; ++c)
-    if (c < 2)
-      out[c] = lop(&s->l[c], in[c], 200); // usage
-    else
-      out[c] = 0;
-  return 0;
-}
-```
-
-# Live-coding Audio
-
-## How Pure-data Works
-
-- tightly coupled core/GUI
-
-- Object boxes on a canvas
-
-- each Object keeps its state
-
-- patch cords form a DSP graph
-
-## How SuperCollider3 Works
-
-- loosely coupled client/server
-
-- language compiles UGen graph into a Synth
-
-- server maintains a collection of Synths
-
-- server processes Synths in order
-
-## Pure-data Strengths
-
-- deterministic execution
-
-- subsample accurate logical clock
-
-- plugins ("externals") for graphics etc
-
-- liberal license
-
-- single lead developer, conservative changes
-
-## SuperCollider3 Strengths
-
-- IDE evaluates selected code
-
-- server handles dynamic allocation well
-
-- timing with latency offset
-
-- copyleft license
-
-- community development, breaking changes
-
-## Pure-data Weaknesses
-
-- predefined collection of Objects
-
-- flexible maths is slower: expr, expr~, fexpr~
-
-- all changes recompile the whole DSP chain
-
-- how to structure DSP live-coding to avoid discontinuities?
-
-## SuperCollider3 Weaknesses
-
-- (note: I'm no SuperCollider3 expert)
-
-- predefined collection of UGens
-
-- Synths can't be modified while they are running
-
-- how to structure DSP live-coding to avoid discontinuities?
+# Motivation
 
 ## How Clive Works
 
@@ -191,7 +56,124 @@ int go(S *s, int channels, const float *in, float *out) {
 
 - processing uses single-sample callbacks (slow)
 
-# Where Next?
+# JACK Audio
+
+## JACK Client Setup
+
+\fontsize{12pt}{13}\selectfont
+
+```C
+client = jack_client_open("live", JackNoStartServer, 0);
+jack_set_process_callback(client, processcb, 0);
+out_port = jack_port_register(client, "live:output_1",
+      JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+jack_activate(client);
+jack_connect(client,
+      jack_port_name(out_port), "system:playback_1");
+```
+
+## JACK Process Callback
+
+\fontsize{12pt}{13}\selectfont
+
+```C
+int processcb(jack_nframes_t nframes, void *arg) {
+  jack_default_audio_sample_t *in, *out;
+  in  = jack_port_get_buffer(in_port,  nframes);
+  out = jack_port_get_buffer(out_port, nframes);
+  for (jack_nframes_t i = 0; i < nframes; ++i)
+    out[i] = state.func(state.data, in[i]);
+  return 0;
+}
+```
+
+## Clive Concept
+
+- change `state.func` at runtime
+
+- preserve contents of `state.data`
+
+# Dynamic Code Reloading
+
+## Using `libdl`
+
+\fontsize{12pt}{13}\selectfont
+
+```C
+void *old_dl = 0;
+void *new_dl = 0;
+if ((new_dl = dlopen("go.so", RTLD_NOW))) {
+  callback *new_cb;
+  new_cb = dlsym(new_dl, "go");
+  if (new_cb) {
+    while (inprocesscb) ; // race condition
+    state.func = new_cb;
+    state.reload = 1;
+    if (old_dl) dlclose(old_dl);
+    old_dl = new_dl;
+  } else dlclose(new_dl);
+}
+```
+
+## Race Condition
+
+- don't unload running code (otherwise... boom!)
+
+```C
+int processcb(/* ... */) {
+  inprocesscb = 1;
+  // ...
+  inprocesscb = 0;
+}
+```
+
+## Cache Circumvention
+
+- `dlopen` caches based on filenames
+
+- need to copy the `go.so` file to a new location
+
+- double buffering works (two copies are enough)
+
+# Detecting File Changes
+
+## Getting INotify Events
+
+\fontsize{12pt}{13}\selectfont
+
+```C
+int ino = inotify_init();
+int wd = inotify_add_watch(ino, ".", IN_CLOSE_WRITE);
+ssize_t buf_bytes =
+  sizeof(struct inotify_event) + NAME_MAX + 1;
+char *buf = malloc(buf_bytes);
+while (1) {
+  memset(buf, 0, buf_bytes);
+  ssize_t r = read(ino, buf, buf_bytes);
+  if (r == -1) sleep(1);
+  else /* parse events */ ;
+}
+```
+
+## Parsing INotify Events
+
+\fontsize{12pt}{13}\selectfont
+
+```C
+char *bufp = buf;
+while (bufp < buf + r) {
+  struct inotify_event *ev = bufp;
+  bufp += sizeof(*ev) + ev->len;
+  if (ev->mask & IN_CLOSE_WRITE) {
+    if (0 == strcmp("go.so", ev->name))
+      /* reload */ ;
+    if (0 == strcmp("go.c", ev->name))
+      /* recompile */ ;
+  }
+}
+```
+
+# Future Work
 
 ## Embiggen UGen Library
 
@@ -199,7 +181,7 @@ int go(S *s, int channels, const float *in, float *out) {
 
 - filters (Butterworth, Moog, ...)
 
-- effects (hverb, ...)
+- spatialisation (ambisonics, ...)
 
 - sequencing (metaphor, ...)
 
@@ -213,11 +195,13 @@ int go(S *s, int channels, const float *in, float *out) {
 
 ## Embedded DSP
 
-- Bela platform: low latency audio processing device
+- low power audio processing devices
+
+- process external inputs with very low latency
 
 - compile on host and transfer over USB/network
 
-- also supports sensors/electronics
+- also support sensors/electronics
 
 - rapid prototyping of embedded instruments
 
