@@ -17,3 +17,11 @@ usage:
   git clone .../clive.git
   cd clive/src && ./start.sh
   edit go.c code, save -> automatic git commit + recompile + reload
+
+visuals deps:
+  pkg-config
+  libv4l-dev
+  libjpeg-dev
+  libglew-dev
+  libglfw3-dev
+  libglm-dev
