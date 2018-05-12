@@ -6,6 +6,9 @@ classoption: aspectratio=149
 fontfamily: lato
 fontfamilyoptions: default
 fontsize: 14pt
+header-includes:
+  - \definecolor{mathr}{rgb}{0.5, 0.25, 0.25}
+  - \usecolortheme[named=mathr]{structure}
 ---
 
 ## Overview
