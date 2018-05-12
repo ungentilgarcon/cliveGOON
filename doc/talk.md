@@ -184,11 +184,11 @@ while (bufp < buf + r) {
 
 - oscillators (bandlimited wavetables, ...)
 
-- filters (Butterworth, Moog, ...)
+- filters (Butterworth, ...)
 
 - spatialisation (ambisonics, ...)
 
-- sequencing (metaphor, ...)
+- sequencing (varistep, ...)
 
 ## Block-based Processing
 
