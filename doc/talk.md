@@ -154,7 +154,7 @@ ssize_t buf_bytes =
 char *buf = malloc(buf_bytes);
 while (1) {
   memset(buf, 0, buf_bytes);
-  ssize_t r = read(ino, buf, buf_bytes);
+  ssize_t r = read(ino, buf, buf_bytes); // blocking
   if (r == -1) sleep(1);
   else /* parse events */ ;
 }
