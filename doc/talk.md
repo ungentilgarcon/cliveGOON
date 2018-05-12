@@ -1,7 +1,7 @@
 ---
 title: Live-coding Audio in C
 author: Claude Heiland-Allen
-date: 2018-05-02
+date: 2018-05-12
 classoption: aspectratio=149
 fontfamily: lato
 fontfamilyoptions: default
