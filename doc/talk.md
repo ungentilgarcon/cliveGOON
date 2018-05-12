@@ -11,9 +11,9 @@ header-includes:
   - \usecolortheme[named=mathr]{structure}
 ---
 
-## Overview
+## Contents
 
-- Motivation
+- Overview
 
 - JACK Audio
 
@@ -23,7 +23,7 @@ header-includes:
 
 - Future Work
 
-# Motivation
+# Overview
 
 ## How Clive Works
 
