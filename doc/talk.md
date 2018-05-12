@@ -123,10 +123,12 @@ if ((new_dl = dlopen("go.so", RTLD_NOW))) {
 - don't unload running code (otherwise... boom!)
 
 ```C
+volatile inprocesscb = 0;
 int processcb(/* ... */) {
   inprocesscb = 1;
   // ...
   inprocesscb = 0;
+  return 0;
 }
 ```
 
