@@ -11,14 +11,9 @@ deps:
   htop
   nano
   xterm
-  mplayer
   inotifywait (inotify-tools)
 
 usage:
   git clone .../clive.git
-  ln -s your-onfailure-samples-directory/ clive/doh
   cd clive/src && ./start.sh
-  edit code, save -> automatic git commit + recompile + reload
-
-bugs:
-  git autocommit spews errors if no changes (eg: on compile failure)
+  edit go.c code, save -> automatic git commit + recompile + reload
