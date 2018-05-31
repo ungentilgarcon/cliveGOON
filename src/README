@@ -4,7 +4,6 @@ deps:
   jack-dev
   bash
   make
-  colorgcc
   gcc
   git
   ecasound
