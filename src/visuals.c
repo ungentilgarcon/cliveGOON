@@ -488,7 +488,7 @@ int read_webcam(int webcam, int width, int height) {
   jpeg_mem_src(&cinfo, (const unsigned char*) webcam_buffers[buf.index].start, buf.length);
   jpeg_read_header(&cinfo, 0);
   jpeg_start_decompress(&cinfo);
-  if (cinfo.output_width == width && cinfo.output_height == height && cinfo.output_components == 3)
+  if (cinfo.output_width == (unsigned int) width && cinfo.output_height == (unsigned int) height && cinfo.output_components == 3)
     while (cinfo.output_scanline < cinfo.output_height)
       jpeg_read_scanlines(&cinfo, webcam_buffer_ptrs + cinfo.output_scanline, cinfo.output_height);
   else
