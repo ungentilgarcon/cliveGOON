@@ -212,6 +212,8 @@ index.
         while (inprocesscb) ;
         state.func = new_cb;
         state.reload = 1;
+        // race mitigation
+        while (inprocesscb) ;
         if (old_dl) {
           dlclose(old_dl);
         }
