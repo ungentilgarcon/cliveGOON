@@ -1,4 +1,4 @@
-all: paper.pdf talk.pdf lightning-talk.pdf
+all: paper.pdf talk.pdf talk-thsf.pdf lightning-talk.pdf
 
 clean:
 	-rm paper.aux paper.bbl paper.blg paper.log paper.out
