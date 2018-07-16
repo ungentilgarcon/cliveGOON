@@ -59,6 +59,14 @@ header-includes:
 
 - processing uses single-sample callbacks (slow)
 
+## Two-phase Edit/Commit Cycle vs Pure-data (problem)
+
+[two-phase-pd-1.png]
+
+## Two-phase Edit/Commit Cycle vs Pure-data (workaround)
+
+[two-phase-pd-2.png]
+
 # JACK Audio
 
 ## JACK Client Setup
