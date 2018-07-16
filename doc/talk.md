@@ -61,11 +61,11 @@ header-includes:
 
 ## Two-phase Edit/Commit Cycle vs Pure-data (problem)
 
-[two-phase-pd-1.png]
+![problem](two-phase-pd-1.png)
 
 ## Two-phase Edit/Commit Cycle vs Pure-data (workaround)
 
-[two-phase-pd-2.png]
+![workaround](two-phase-pd-2.png)
 
 # JACK Audio
 
