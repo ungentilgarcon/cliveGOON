@@ -1,4 +1,4 @@
-all: live go.so visuals ascii.pgm
+all: live go.so
 
 live: live.c
 	gcc -std=c99 -Wall -pedantic -Wextra -Wno-unused-parameter -O3 -march=native -mfpmath=sse -I. -o live live.c `pkg-config --cflags --libs jack` -ldl -lm
@@ -6,7 +6,7 @@ live: live.c
 go.so: go.c dsp.h dsp/*.h
 	gcc -std=c99 -Wall -pedantic -Wextra -Wno-unused-parameter -O3 -march=native -mfpmath=sse -I. -shared -fPIC -o go.so go.c -lm
 
-visuals: visuals.c dsp.h dsp/*.h
+visuals: visuals.c dsp.h dsp/*.h ascii.pgm
 	gcc -xc++ -std=c++11 -Wall -pedantic -Wextra -Wno-unused-parameter -O3 -march=native -I. -o visuals visuals.c -lGL -lGLEW -lglfw -lv4l2 `pkg-config --cflags --libs jack` -lm -ljpeg
 
 ascii.pgm: ascii.png
