@@ -15,11 +15,13 @@ header-includes:
 
 - Linux only (sorry)
 
-- install dependencies and configure sudo and JACK
+- install dependencies, configure sudo and JACK
 
 - clone the repository
 
 - launching, exiting
+
+- an example
 
 ## Dependencies
 
@@ -73,13 +75,21 @@ Launch `clive`:
 After a short delay, there should be 2 terminal windows on the left and
 the `geany` text editor which can be resized to fit on the right.
 
+Edit `go.c`, press Ctrl-S to save, which will recompile and reload the
+code.
+
 ## Exiting
 
-- Ctrl-C in the terminal running `./start.sh`.
+- Ctrl-C in the terminal running `./start.sh`
 
 - Stop and rewind JACK transport
 
-- `git checkout master`.
+- `git checkout master`
+
+## Example: a metronome
+
+    git checkout origin/metronome
+    git checkout -b metronome
 
 ## Example: a metronome
 
