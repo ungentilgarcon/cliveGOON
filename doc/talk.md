@@ -1,7 +1,7 @@
 ---
 title: Live-coding Audio in C
 author: Claude Heiland-Allen
-date: 2018-05-12
+date: 2018-09-02
 classoption: aspectratio=149
 fontfamily: lato
 fontfamilyoptions: default
@@ -43,7 +43,7 @@ header-includes:
 
 - compilation is realtime safe
 
-- reloading is (almost) realtime safe
+- reloading is realtime safe
 
 - processing uses single-sample callbacks (simple)
 
@@ -58,14 +58,6 @@ header-includes:
 - reloading is at JACK block boundaries
 
 - processing uses single-sample callbacks (slow)
-
-## Two-phase Edit/Commit Cycle vs Pure-data (problem)
-
-![problem](two-phase-pd-1.png)
-
-## Two-phase Edit/Commit Cycle vs Pure-data (workaround)
-
-![workaround](two-phase-pd-2.png)
 
 # JACK Audio
 
@@ -120,6 +112,7 @@ if ((new_dl = dlopen("go.so", RTLD_NOW))) {
     while (inprocesscb) ; // race condition
     state.func = new_cb;
     state.reload = 1;
+    while (inprocesscb) ; // race condition
     if (old_dl) dlclose(old_dl);
     old_dl = new_dl;
   } else dlclose(new_dl);
@@ -188,35 +181,11 @@ while (bufp < buf + r) {
 
 # Future Work
 
-## Embiggen UGen Library
+- embiggened UGen library
 
-- oscillators (bandlimited wavetables, ...)
+- block-based processing (including FFT)
 
-- filters (Butterworth, ...)
-
-- spatialisation (ambisonics, ...)
-
-- sequencing (varistep, ...)
-
-## Block-based Processing
-
-- more CPU efficient
-
-- more awkward
-
-- FFT-based spectral processing
-
-## Embedded DSP
-
-- low power audio processing devices
-
-- process external inputs with very low latency
-
-- compile on host and transfer over USB/network
-
-- also support sensors/electronics
-
-- rapid prototyping of embedded instruments
+- embedded DSP for low latency IO
 
 # Thanks
 
