@@ -198,7 +198,3 @@ while (bufp < buf + r) {
 - <claude@mathr.co.uk>
 
 - <https://mathr.co.uk/clive>
-
-- <https://code.mathr.co.uk/clive>
-
-- `git clone https://code.mathr.co.uk/clive.git`
