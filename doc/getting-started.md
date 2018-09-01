@@ -69,7 +69,7 @@ Launch `qjackctl` and configure your sound card.
 
 Launch `clive`:
 
-    cd clive/src
+    cd clive-core/src
     ./start.sh
 
 After a short delay, there should be 2 terminal windows on the left and
