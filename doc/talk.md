@@ -1,7 +1,7 @@
 ---
 title: Live-coding Audio in C
 author: Claude Heiland-Allen
-date: 2018-05-12
+date: 2018-09-02
 classoption: aspectratio=149
 fontfamily: lato
 fontfamilyoptions: default
@@ -13,13 +13,13 @@ header-includes:
 
 ## Contents
 
-- Overview
+- Overview (principle, strengths, weaknesses)
 
-- JACK Audio
+- JACK Audio (client, process callback)
 
-- Dynamic Reloading
+- Dynamic Reloading (races, caching)
 
-- Detecting File Changes
+- Detecting File Changes (inotify events)
 
 - Future Work
 
@@ -43,7 +43,7 @@ header-includes:
 
 - compilation is realtime safe
 
-- reloading is (almost) realtime safe
+- reloading is realtime safe (almost)
 
 - processing uses single-sample callbacks (simple)
 
@@ -58,14 +58,6 @@ header-includes:
 - reloading is at JACK block boundaries
 
 - processing uses single-sample callbacks (slow)
-
-## Two-phase Edit/Commit Cycle vs Pure-data (problem)
-
-![problem](two-phase-pd-1.png)
-
-## Two-phase Edit/Commit Cycle vs Pure-data (workaround)
-
-![workaround](two-phase-pd-2.png)
 
 # JACK Audio
 
@@ -120,6 +112,7 @@ if ((new_dl = dlopen("go.so", RTLD_NOW))) {
     while (inprocesscb) ; // race condition
     state.func = new_cb;
     state.reload = 1;
+    while (inprocesscb) ; // race condition
     if (old_dl) dlclose(old_dl);
     old_dl = new_dl;
   } else dlclose(new_dl);
@@ -131,7 +124,7 @@ if ((new_dl = dlopen("go.so", RTLD_NOW))) {
 - don't unload running code (otherwise... boom!)
 
 ```C
-volatile inprocesscb = 0;
+volatile int inprocesscb = 0;
 int processcb(/* ... */) {
   inprocesscb = 1;
   // ...
@@ -142,9 +135,9 @@ int processcb(/* ... */) {
 
 ## Cache Circumvention
 
-- `dlopen` caches based on filenames
+- `dlopen` caches based on filenames (or inodes?)
 
-- need to copy the `go.so` file to a new location
+- need to **copy** the `go.so` file to a new location
 
 - double buffering works (two copies are enough)
 
@@ -188,35 +181,15 @@ while (bufp < buf + r) {
 
 # Future Work
 
-## Embiggen UGen Library
+## Future Work
 
-- oscillators (bandlimited wavetables, ...)
+- embiggen UGen library
 
-- filters (Butterworth, ...)
+- block-based processing (including FFT)
 
-- spatialisation (ambisonics, ...)
+- low-latency embedded DSP
 
-- sequencing (varistep, ...)
-
-## Block-based Processing
-
-- more CPU efficient
-
-- more awkward
-
-- FFT-based spectral processing
-
-## Embedded DSP
-
-- low power audio processing devices
-
-- process external inputs with very low latency
-
-- compile on host and transfer over USB/network
-
-- also support sensors/electronics
-
-- rapid prototyping of embedded instruments
+    (cross-compile on host, run on device)
 
 # Thanks
 
@@ -227,3 +200,5 @@ while (bufp < buf + r) {
 - <https://mathr.co.uk/clive>
 
 - <https://code.mathr.co.uk/clive>
+
+- `git clone https://code.mathr.co.uk/clive.git`
