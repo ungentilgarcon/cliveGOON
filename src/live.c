@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #ifdef __x86_64__
@@ -254,12 +254,15 @@ index.
             }
             if (0 == strcmp("go.c", ev->name)) {
               // recompile
-              system(
+              int ret = system(
                 "git add go.c ; "
                 "git --no-pager diff --cached --color ; "
                 "git commit -uno -m \"go $(date --iso=s)\" ; "
                 "make --quiet"
               );
+              if (ret == -1 || ! WIFEXITED(ret) || WEXITSTATUS(ret) != 0) {
+                fprintf(stderr, "\x1b[31;1m%s: %d\x1b[0m\n", "SYSTEM ERROR", ret);
+              }
             }
           }
         }
