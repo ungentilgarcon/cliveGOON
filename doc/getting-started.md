@@ -62,6 +62,9 @@ To check that you are in the audio group:
 ## Download `clive` repository
 
     git clone https://code.mathr.co.uk/clive-core.git
+    cd clive-core
+    git config user.email "you@example.com"
+    git config user.name "Your Name"
 
 ## Launching
 
