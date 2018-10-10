@@ -16,6 +16,8 @@
 
 #include <jack/jack.h>
 
+// TODO: split into IN and OUT
+// TODO: make it settable as a command line argument
 #define CHANNELS 2
 
 // per-sample callback implemented in go.so
