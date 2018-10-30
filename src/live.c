@@ -5,7 +5,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
 #ifdef __x86_64__
 #include <fenv.h>
 #endif

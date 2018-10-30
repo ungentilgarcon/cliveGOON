@@ -1,7 +1,7 @@
 #ifndef DSP_OSC_H
 #define DSP_OSC_H 1
 
-#include "dsp/func.h"
+#include "func.h"
 
 typedef struct { double phase; } PHASOR;
 
